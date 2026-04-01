@@ -55,6 +55,8 @@ async function request(endpoint, options = {}) {
                 throw new ApiError(400, errorData?.error || errorData?.message || 'Bad Request', errorData);
             case 403:
                 throw new ApiError(403, errorData?.error || errorData?.message || 'Forbidden', errorData);
+            case 409:
+                throw new ApiError(409, errorData?.error || errorData?.message || 'Conflict: duplicate entry', errorData);
             case 404:
                 throw new ApiError(404, errorData?.error || errorData?.message || 'Not Found', errorData);
             case 500:

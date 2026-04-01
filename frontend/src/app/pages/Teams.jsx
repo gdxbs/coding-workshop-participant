@@ -102,13 +102,18 @@ const Teams = () => {
   /**
    * Handle delete team
    */
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!hasPermission('delete')) {
       showNotification('You do not have permission to delete teams', 'error');
       return;
     }
-    setTeams(teams.filter((team) => team.id !== id));
-    showNotification('Team deleted successfully', 'success');
+    try {
+      await api.delete(`/api/teams/${id}`);
+      setTeams(teams.filter((team) => team.id !== id));
+      showNotification('Team deleted successfully', 'success');
+    } catch (err) {
+      showNotification(err.message || 'Failed to delete team', 'error');
+    }
   };
 
   /**

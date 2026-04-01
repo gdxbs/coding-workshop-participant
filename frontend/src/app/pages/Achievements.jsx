@@ -105,13 +105,18 @@ const Achievements = () => {
   /**
    * Handle delete achievement
    */
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!hasPermission('delete')) {
       showNotification('You do not have permission to delete achievements', 'error');
       return;
     }
-    setAchievements(achievements.filter((achievement) => achievement.id !== id));
-    showNotification('Achievement deleted successfully', 'success');
+    try {
+      await api.delete(`/api/achievements/${id}`);
+      setAchievements(achievements.filter((achievement) => achievement.id !== id));
+      showNotification('Achievement deleted successfully', 'success');
+    } catch (err) {
+      showNotification(err.message || 'Failed to delete achievement', 'error');
+    }
   };
 
   /**

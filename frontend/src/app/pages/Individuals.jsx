@@ -87,13 +87,18 @@ const Individuals = () => {
   /**
    * Handle delete individual
    */
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!hasPermission('delete')) {
       showNotification('You do not have permission to delete individuals', 'error');
       return;
     }
-    setIndividuals(individuals.filter((individual) => individual.id !== id));
-    showNotification('Individual deleted successfully', 'success');
+    try {
+      await api.delete(`/api/employees/${id}`);
+      setIndividuals(individuals.filter((individual) => individual.id !== id));
+      showNotification('Individual deleted successfully', 'success');
+    } catch (err) {
+      showNotification(err.message || 'Failed to delete individual', 'error');
+    }
   };
 
   /**

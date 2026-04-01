@@ -96,6 +96,10 @@ def create_team(collection: Any, body_str: str) -> Dict[str, Any]:
     if "name" not in data or not data["name"]:
         return build_response(400, {"error": "Missing required field: name"})
 
+    existing = collection.find_one({"name": data["name"]})
+    if existing:
+        return build_response(409, {"error": f"A team with the name '{data['name']}' already exists"})
+
     employee_ids = data.get("employee_ids", [])
     if len(employee_ids) > 5:
         return build_response(400, {"error": "A team can have a maximum of 5 employees."})

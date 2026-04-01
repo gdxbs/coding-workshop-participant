@@ -68,6 +68,10 @@ def create_achievement(collection: Any, body_str: str) -> Dict[str, Any]:
         if field not in data or not data[field]:
             return build_response(400, {"error": f"Missing required field: {field}"})
 
+    existing = collection.find_one({"title": data["title"]})
+    if existing:
+        return build_response(409, {"error": f"An achievement with the title '{data['title']}' already exists"})
+
     collection.insert_one(data)
     return build_response(201, data)
 
