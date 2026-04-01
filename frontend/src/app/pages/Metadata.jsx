@@ -1,0 +1,327 @@
+import React, { useState } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  Button,
+  IconButton,
+  Tooltip,
+  TextField,
+  InputAdornment,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Grid,
+  CircularProgress,
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Search as SearchIcon,
+} from '@mui/icons-material';
+import { DataGrid } from '@mui/x-data-grid';
+import { mockMetadata } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
+
+/**
+ * Metadata form component
+ */
+const MetadataForm = ({ open, onClose, onSave, metadata }) => {
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [formData, setFormData] = useState(
+    metadata || {
+      category: '',
+      key: '',
+      value: '',
+      description: '',
+    }
+  );
+
+  const handleChange = (field, value) => {
+    setFormData({ ...formData, [field]: value });
+    if (errors[field]) {
+      setErrors({ ...errors, [field]: '' });
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.category.trim()) newErrors.category = 'Category is required';
+    if (!formData.key.trim()) newErrors.key = 'Key is required';
+    if (!formData.value.trim()) newErrors.value = 'Value is required';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    setLoading(true);
+    setTimeout(() => {
+      const metadataData = {
+        ...formData,
+        id: metadata ? metadata.id : Date.now(),
+        lastUpdated: new Date().toISOString().split('T')[0],
+      };
+      onSave(metadataData);
+      setLoading(false);
+      onClose();
+    }, 1000);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{metadata ? 'Edit Metadata' : 'Add New Metadata'}</DialogTitle>
+      <DialogContent>
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid size={{ xs: 12 }}>
+            <TextField
+              fullWidth
+              required
+              label="Category"
+              value={formData.category}
+              onChange={(e) => handleChange('category', e.target.value)}
+              error={!!errors.category}
+              helperText={errors.category}
+            />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <TextField
+              fullWidth
+              required
+              label="Key"
+              value={formData.key}
+              onChange={(e) => handleChange('key', e.target.value)}
+              error={!!errors.key}
+              helperText={errors.key}
+            />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <TextField
+              fullWidth
+              required
+              label="Value"
+              value={formData.value}
+              onChange={(e) => handleChange('value', e.target.value)}
+              error={!!errors.value}
+              helperText={errors.value}
+            />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              label="Description"
+              value={formData.description}
+              onChange={(e) => handleChange('description', e.target.value)}
+            />
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={loading}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          disabled={loading}
+          startIcon={loading && <CircularProgress size={20} />}
+        >
+          {loading ? 'Saving...' : 'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+/**
+ * Metadata page component
+ * Displays and manages metadata records in a DataGrid
+ */
+const Metadata = () => {
+  const { hasPermission } = useAuth();
+  const { showNotification } = useNotification();
+  const [metadata, setMetadata] = useState(mockMetadata);
+  const [searchText, setSearchText] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
+  const [selectedMetadata, setSelectedMetadata] = useState(null);
+
+  const filteredMetadata = metadata.filter((item) =>
+    Object.values(item).some((value) =>
+      String(value).toLowerCase().includes(searchText.toLowerCase())
+    )
+  );
+
+  const handleCreate = () => {
+    if (!hasPermission('create')) {
+      showNotification('You do not have permission to add metadata', 'error');
+      return;
+    }
+    setSelectedMetadata(null);
+    setFormOpen(true);
+  };
+
+  const handleEdit = (item) => {
+    if (!hasPermission('edit')) {
+      showNotification('You do not have permission to edit metadata', 'error');
+      return;
+    }
+    setSelectedMetadata(item);
+    setFormOpen(true);
+  };
+
+  const handleDelete = (id) => {
+    if (!hasPermission('delete')) {
+      showNotification('You do not have permission to delete metadata', 'error');
+      return;
+    }
+    setMetadata(metadata.filter((item) => item.id !== id));
+    showNotification('Metadata deleted successfully', 'success');
+  };
+
+  const handleSave = (metadataData) => {
+    if (selectedMetadata) {
+      setMetadata(
+        metadata.map((item) => (item.id === metadataData.id ? metadataData : item))
+      );
+      showNotification('Metadata updated successfully', 'success');
+    } else {
+      setMetadata([...metadata, metadataData]);
+      showNotification('Metadata added successfully', 'success');
+    }
+  };
+
+  const columns = [
+    {
+      field: 'category',
+      headerName: 'Category',
+      width: 150,
+    },
+    {
+      field: 'key',
+      headerName: 'Key',
+      flex: 1,
+      minWidth: 200,
+    },
+    {
+      field: 'value',
+      headerName: 'Value',
+      width: 120,
+    },
+    {
+      field: 'description',
+      headerName: 'Description',
+      flex: 1,
+      minWidth: 250,
+    },
+    {
+      field: 'lastUpdated',
+      headerName: 'Last Updated',
+      width: 140,
+      valueFormatter: (value) => new Date(value).toLocaleDateString(),
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 120,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <Box>
+          <Tooltip title="Edit">
+            <IconButton
+              size="small"
+              onClick={() => handleEdit(params.row)}
+              disabled={!hasPermission('edit')}
+              aria-label="edit metadata"
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete">
+            <IconButton
+              size="small"
+              onClick={() => handleDelete(params.row.id)}
+              disabled={!hasPermission('delete')}
+              aria-label="delete metadata"
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ),
+    },
+  ];
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          Metadata
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleCreate}
+          disabled={!hasPermission('create')}
+        >
+          Add Metadata
+        </Button>
+      </Box>
+
+      <Paper sx={{ p: 2 }}>
+        <TextField
+          fullWidth
+          placeholder="Search metadata..."
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          sx={{ mb: 2 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+        />
+
+        <DataGrid
+          rows={filteredMetadata}
+          columns={columns}
+          initialState={{
+            pagination: {
+              paginationModel: { pageSize: 10 },
+            },
+          }}
+          pageSizeOptions={[5, 10, 25, 50]}
+          checkboxSelection
+          disableRowSelectionOnClick
+          autoHeight
+          sx={{
+            '& .MuiDataGrid-cell:focus': {
+              outline: 'none',
+            },
+            '& .MuiDataGrid-row:hover': {
+              backgroundColor: 'action.hover',
+            },
+          }}
+        />
+      </Paper>
+
+      <MetadataForm
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSave={handleSave}
+        metadata={selectedMetadata}
+      />
+    </Box>
+  );
+};
+
+export default Metadata;
