@@ -1,9 +1,17 @@
 import os
 import json
+import datetime
 from typing import Dict, Any, Optional
 from pymongo.errors import PyMongoError
 from shared.db_utils import get_db_connection
 from shared.auth import require_role_and_ownership
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 def build_response(status_code: int, body: Any = None) -> Dict[str, Any]:
     response: Dict[str, Any] = {
@@ -14,17 +22,29 @@ def build_response(status_code: int, body: Any = None) -> Dict[str, Any]:
         }
     }
     if body is not None:
-        response["body"] = json.dumps(body)
+        response["body"] = json.dumps(body, cls=DateTimeEncoder)
     return response
 
 @require_role_and_ownership
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
-        http_method: str = event.get("httpMethod", "")
+        http_method: str = (event.get("httpMethod") or event.get("requestContext", {}).get("http", {}).get("method") or event.get("method") or "").upper()
         path_parameters: Optional[Dict[str, str]] = event.get("pathParameters") or {}
         body_str: str = event.get("body", "")
         
         metadata_id: Optional[str] = path_parameters.get("id")
+        RESERVED_IDS = ["teams", "individuals", "employees", "achievements", "metadata", "api"]
+        if metadata_id in RESERVED_IDS:
+            metadata_id = None
+            
+        # Fallback for V2 Function URLs
+        if not metadata_id:
+            raw_path = event.get("rawPath", "") or event.get("path", "")
+            parts = [p for p in raw_path.split("/") if p]
+            if parts:
+                possible_id = parts[-1]
+                if possible_id not in RESERVED_IDS:
+                    metadata_id = possible_id
 
         client = get_db_connection()
         db_name: str = os.environ.get("MONGO_NAME", "acme_team_mgmt")
@@ -47,7 +67,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 return build_response(400, {"error": "Missing metadata ID"})
             return delete_metadata(collection, metadata_id)
         else:
-            return build_response(405, {"error": "Method Not Allowed"})
+            return build_response(418, {
+                "error": "I am a teapot (and you used an unrecognized method)",
+                "method_detected": http_method,
+                "event_keys": list(event.keys()),
+                "request_context_keys": list(event.get("requestContext", {}).keys())
+            })
 
     except ValueError as ve:
         return build_response(500, {"error": str(ve)})

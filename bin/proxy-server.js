@@ -38,7 +38,7 @@ const server = http.createServer((req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-user-id, x-system-role, *');
   res.setHeader('Access-Control-Max-Age', '86400');
 
   // Handle preflight
@@ -63,7 +63,19 @@ const server = http.createServer((req, res) => {
   }
 
   const endpointName = pathParts[1];
-  const targetUrl = endpoints[endpointName] + (parsedUrl.search || '');
+  const extraPath = parsedUrl.pathname.substring('/api'.length); // Extracts e.g. /teams/t_001
+
+  if (!endpointName || !endpoints[endpointName]) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      error: `Unknown endpoint: ${endpointName}`,
+      available: Object.keys(endpoints)
+    }));
+    return;
+  }
+
+  const baseUrl = endpoints[endpointName].replace(/\/$/, '');
+  const targetUrl = baseUrl + extraPath + (parsedUrl.search || '');
 
   if (!targetUrl) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -104,16 +116,25 @@ const server = http.createServer((req, res) => {
     }
   };
 
+  if (headers['authorization']) options.headers['authorization'] = headers['authorization'];
+  if (headers['x-user-id']) options.headers['x-user-id'] = headers['x-user-id'];
+  if (headers['x-system-role']) options.headers['x-system-role'] = headers['x-system-role'];
+
+  const startTime = Date.now();
+
   const proxyReq = protocol.request(options, (proxyRes) => {
+    const duration = Date.now() - startTime;
+    console.log(`  <-- ${proxyRes.statusCode} (${duration}ms)`);
+
     // Filter out CORS headers from Lambda response since we set our own
-    const headers = { ...proxyRes.headers };
-    delete headers['access-control-allow-origin'];
-    delete headers['access-control-allow-methods'];
-    delete headers['access-control-allow-headers'];
-    delete headers['access-control-max-age'];
+    const resHeaders = { ...proxyRes.headers };
+    delete resHeaders['access-control-allow-origin'];
+    delete resHeaders['access-control-allow-methods'];
+    delete resHeaders['access-control-allow-headers'];
+    delete resHeaders['access-control-max-age'];
 
     // Forward status and filtered headers
-    res.writeHead(proxyRes.statusCode, headers);
+    res.writeHead(proxyRes.statusCode, resHeaders);
     proxyRes.pipe(res);
   });
 
@@ -123,7 +144,11 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ error: 'Bad Gateway', message: err.message }));
   });
 
-  req.pipe(proxyReq);
+  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+    req.pipe(proxyReq);
+  } else {
+    proxyReq.end();
+  }
 });
 
 server.listen(PORT, () => {

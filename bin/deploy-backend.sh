@@ -35,13 +35,13 @@ echo "Coding Workshop - Backend Deployment"
 echo "=========================================="
 echo ""
 
-# Verify required dependencies
-tflocal --version > /dev/null 2>&1 || { echo "ERROR: 'tflocal' is missing. Aborting..."; exit 1; }
-terraform --version > /dev/null 2>&1 || { echo "ERROR: 'terraform' is missing. Aborting..."; exit 1; }
-
 # Resolve script directory and project root paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" > /dev/null 2>&1 || exit 1; pwd -P)"
 PROJECT_ROOT="$(cd $SCRIPT_DIR/.. > /dev/null 2>&1 || exit 1; pwd -P)"
+
+# Set up PATH and AWS region
+export PATH="$HOME/.local/bin:$PATH"
+export AWS_REGION=${AWS_REGION:-us-east-1}
 
 # Define configuration file paths
 ENVIRONMENT_CONFIG="$PROJECT_ROOT/ENVIRONMENT.config"
@@ -51,9 +51,9 @@ ENVIRONMENT=${1:-"aws"}
 # Select terraform command (terraform or tflocal)
 TF_CMD="terraform"
 
-# Set up PATH and AWS region
-export PATH="$HOME/.local/bin:$PATH"
-export AWS_REGION=${AWS_REGION:-us-east-1}
+# Verify required dependencies
+tflocal --version > /dev/null 2>&1 || { echo "ERROR: 'tflocal' is missing. Aborting..."; exit 1; }
+terraform --version > /dev/null 2>&1 || { echo "ERROR: 'terraform' is missing. Aborting..."; exit 1; }
 
 echo "Deploying infrastructure..."
 echo "Environment: $ENVIRONMENT"
@@ -102,7 +102,12 @@ else
 fi
 
 # Apply Terraform configuration automatically
-$TF_CMD apply -auto-approve
+TF_VARS=""
+if [ -n "$TF_VAR_aws_mongo_host" ]; then
+    TF_VARS="-var=aws_mongo_host=$TF_VAR_aws_mongo_host"
+fi
+
+$TF_CMD apply -auto-approve $TF_VARS
 echo "Infrastructure deployment complete!"
 
 # Display API endpoint

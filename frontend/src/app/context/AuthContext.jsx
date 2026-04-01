@@ -20,6 +20,14 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(mockUsers[0]); // Default Alice
 
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('currentUser');
+    }
+  }, [currentUser]);
+
   const loginAs = (userId) => {
     const user = mockUsers.find(u => u._id === userId);
     if (user) {
@@ -42,17 +50,20 @@ export const AuthProvider = ({ children }) => {
   const hasPermission = (action, resource = null) => {
     if (!currentUser) return false;
     
-    // Admins have full access
+    // Rule 1: Admins have full access
     if (currentUser.system_role === 'Admin') {
       return true;
     }
     
-    // Employees have read-only, but logic here determines edit/delete access based on resource ownership
+    // Rule 2 & 3: Employees
     if (currentUser.system_role === 'Employee') {
-      if (action === 'create') return false;
+      // Task 3: Ensure "Create New Team" remains accessible
+      if (action === 'create') {
+        return true;
+      }
       
+      // Task 2: Edit/Delete active ONLY if current user is the leader
       if (action === 'edit' || action === 'delete') {
-        // Only if the employee is the leader of the specific team/resource
         if (resource && resource.leader_id === currentUser._id) {
           return true;
         }

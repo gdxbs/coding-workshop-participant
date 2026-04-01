@@ -4,12 +4,20 @@ Provides RESTful endpoints to perform CRUD operations on teams.
 """
 import os
 import json
+import datetime
 from typing import Dict, Any, Optional, Tuple
 
 from pymongo.errors import PyMongoError
 
 from shared.db_utils import get_db_connection
 from shared.auth import require_role_and_ownership
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 def build_response(status_code: int, body: Any = None) -> Dict[str, Any]:
     """
@@ -30,7 +38,7 @@ def build_response(status_code: int, body: Any = None) -> Dict[str, Any]:
         }
     }
     if body is not None:
-        response["body"] = json.dumps(body)
+        response["body"] = json.dumps(body, cls=DateTimeEncoder)
     return response
 
 
@@ -48,11 +56,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         Dict[str, Any]: AWS API Gateway formatted response.
     """
     try:
-        http_method: str = event.get("httpMethod", "")
+        http_method: str = (event.get("httpMethod") or event.get("requestContext", {}).get("http", {}).get("method") or event.get("method") or "").upper()
         path_parameters: Optional[Dict[str, str]] = event.get("pathParameters") or {}
         body: str = event.get("body", "")
         
         team_id: Optional[str] = path_parameters.get("id")
+        RESERVED_IDS = ["teams", "individuals", "employees", "achievements", "metadata", "api"]
+        if team_id in RESERVED_IDS:
+            team_id = None
+        
+        # Fallback for V2 Function URLs
+        if not team_id:
+            raw_path = event.get("rawPath", "") or event.get("path", "")
+            parts = [p for p in raw_path.split("/") if p]
+            if parts:
+                possible_id = parts[-1]
+                if possible_id not in RESERVED_IDS:
+                    team_id = possible_id
 
         client = get_db_connection()
         db_name: str = os.environ.get("MONGO_NAME", "acme_team_mgmt")

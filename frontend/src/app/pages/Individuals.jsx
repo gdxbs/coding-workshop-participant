@@ -34,20 +34,21 @@ const Individuals = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [selectedIndividual, setSelectedIndividual] = useState(null);
 
-  useEffect(() => {
-    const fetchIndividuals = async () => {
-      try {
-        const data = await api.get('/api/individuals');
-        if (data) {
-          const formatted = data.map(ind => ({ ...ind, id: ind._id }));
-          setIndividuals(formatted);
-        }
-      } catch (err) {
-        showNotification('Failed to load individuals', 'error');
-        console.error(err);
+  const fetchIndividualsData = async () => {
+    try {
+      const data = await api.get('/api/employees');
+      if (data) {
+        const formatted = data.map(ind => ({ ...ind, id: ind._id }));
+        setIndividuals(formatted);
       }
-    };
-    fetchIndividuals();
+    } catch (err) {
+      showNotification('Failed to load individuals', 'error');
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchIndividualsData();
   }, []);
 
   /**
@@ -98,20 +99,12 @@ const Individuals = () => {
   /**
    * Handle save individual (create or update)
    */
-  const handleSave = (individualData) => {
-    if (selectedIndividual) {
-      // Update existing individual
-      setIndividuals(
-        individuals.map((individual) =>
-          individual.id === individualData.id ? individualData : individual
-        )
-      );
-      showNotification('Individual updated successfully', 'success');
-    } else {
-      // Create new individual
-      setIndividuals([...individuals, individualData]);
-      showNotification('Individual added successfully', 'success');
-    }
+  const handleSave = () => {
+    fetchIndividualsData();
+    showNotification(
+      selectedIndividual ? 'Individual updated successfully' : 'Individual added successfully',
+      'success'
+    );
   };
 
   const columns = [

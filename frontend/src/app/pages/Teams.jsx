@@ -26,42 +26,43 @@ import TeamForm from '../components/TeamForm';
  * Displays and manages team data in a DataGrid
  */
 const Teams = () => {
-  const { hasPermission } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const { showNotification } = useNotification();
   const [teams, setTeams] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [teamsData, individualsData] = await Promise.all([
-          api.get('/api/teams'),
-          api.get('/api/individuals')
-        ]);
-        
-        const indMap = {};
-        if (individualsData) {
-          individualsData.forEach(ind => {
-            indMap[ind._id] = ind.name;
-          });
-        }
-        
-        if (teamsData) {
-          const formatted = teamsData.map(t => ({
-            ...t,
-            id: t._id,
-            leader_name: indMap[t.leader_id] || t.leader_id,
-            employee_count: t.employee_ids ? t.employee_ids.length : 0
-          }));
-          setTeams(formatted);
-        }
-      } catch (err) {
-        showNotification('Failed to load teams', 'error');
-        console.error(err);
+  const fetchData = async () => {
+    try {
+      const [teamsData, individualsData] = await Promise.all([
+        api.get('/api/teams'),
+        api.get('/api/employees')
+      ]);
+      
+      const indMap = {};
+      if (individualsData) {
+        individualsData.forEach(ind => {
+          indMap[ind._id] = ind.name;
+        });
       }
-    };
+      
+      if (teamsData) {
+        const formatted = teamsData.map(t => ({
+          ...t,
+          id: t._id,
+          leader_name: indMap[t.leader_id] || t.leader_id,
+          employee_count: t.employee_ids ? t.employee_ids.length : 0
+        }));
+        setTeams(formatted);
+      }
+    } catch (err) {
+      showNotification('Failed to load teams', 'error');
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, []);
 
@@ -113,16 +114,12 @@ const Teams = () => {
   /**
    * Handle save team (create or update)
    */
-  const handleSave = (teamData) => {
-    if (selectedTeam) {
-      // Update existing team
-      setTeams(teams.map((team) => (team.id === teamData.id ? teamData : team)));
-      showNotification('Team updated successfully', 'success');
-    } else {
-      // Create new team
-      setTeams([...teams, teamData]);
-      showNotification('Team created successfully', 'success');
-    }
+  const handleSave = () => {
+    fetchData();
+    showNotification(
+      selectedTeam ? 'Team updated successfully' : 'Team created successfully',
+      'success'
+    );
   };
 
   const columns = [

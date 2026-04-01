@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import {
   Dialog,
@@ -8,44 +8,14 @@ import {
   Button,
   TextField,
   Grid,
-  FormControlLabel,
-  Checkbox,
   CircularProgress,
   Autocomplete,
+  Alert,
 } from '@mui/material';
+import { api } from '../../services/api';
 
-const teamOptions = [
-  'Engineering - Platform',
-  'Engineering - Mobile',
-  'Product Management',
-  'Design & UX',
-  'Data Science',
-  'Marketing',
-];
-
-const locationOptions = [
-  'San Francisco, CA',
-  'New York, NY',
-  'Austin, TX',
-  'Boston, MA',
-  'Seattle, WA',
-  'Chicago, IL',
-  'Los Angeles, CA',
-  'Remote',
-];
-
-const roleOptions = [
-  'Engineering Manager',
-  'Software Engineer',
-  'Senior Software Engineer',
-  'Product Manager',
-  'Design Lead',
-  'UX Designer',
-  'Data Scientist',
-  'Data Analyst',
-  'Marketing Manager',
-  'Marketing Specialist',
-];
+const systemRoleOptions = ['Admin', 'Employee'];
+const regionOptions = ['North America', 'EMEA', 'APAC', 'LATAM'];
 
 /**
  * Individual form component for creating and editing individuals
@@ -53,26 +23,47 @@ const roleOptions = [
 const IndividualForm = ({ open, onClose, onSave, individual }) => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const [formData, setFormData] = useState(
-    individual || {
-      name: '',
-      email: '',
-      role: '',
-      team: '',
-      location: '',
-      hireDate: '',
-      isDirect: true,
+  const [apiError, setApiError] = useState('');
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    system_role: 'Employee',
+    region: 'North America',
+    job_title: '',
+  });
+
+  useEffect(() => {
+    if (open) {
+      if (individual) {
+        setFormData({
+          name: individual.name || '',
+          email: individual.email || '',
+          system_role: individual.system_role || 'Employee',
+          region: individual.region || 'North America',
+          job_title: individual.job_title || '',
+        });
+      } else {
+        setFormData({
+          name: '',
+          email: '',
+          system_role: 'Employee',
+          region: 'North America',
+          job_title: '',
+        });
+      }
+      setErrors({});
+      setApiError('');
     }
-  );
+  }, [open, individual]);
 
   /**
    * Handle form field changes
    */
   const handleChange = (field, value) => {
-    setFormData({ ...formData, [field]: value });
-    // Clear error for this field
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors({ ...errors, [field]: '' });
+      setErrors((prev) => ({ ...prev, [field]: '' }));
     }
   };
 
@@ -89,26 +80,14 @@ const IndividualForm = ({ open, onClose, onSave, individual }) => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
-    }
+    if (!formData.name.trim()) newErrors.name = 'Name is required';
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!isValidEmail(formData.email)) {
       newErrors.email = 'Invalid email format';
     }
-    if (!formData.role) {
-      newErrors.role = 'Role is required';
-    }
-    if (!formData.team) {
-      newErrors.team = 'Team is required';
-    }
-    if (!formData.location) {
-      newErrors.location = 'Location is required';
-    }
-    if (!formData.hireDate) {
-      newErrors.hireDate = 'Hire date is required';
-    }
+    if (!formData.system_role) newErrors.system_role = 'System role is required';
+    if (!formData.region) newErrors.region = 'Region is required';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -118,31 +97,37 @@ const IndividualForm = ({ open, onClose, onSave, individual }) => {
    * Handle form submission
    */
   const handleSubmit = async () => {
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const individualData = {
-        ...formData,
-        id: individual ? individual.id : Date.now(),
-      };
+    setApiError('');
 
-      onSave(individualData);
-      setLoading(false);
+    try {
+      let result;
+      if (individual && (individual._id || individual.id)) {
+        const id = individual._id || individual.id;
+        result = await api.put(`/api/individuals/${id}`, formData);
+      } else {
+        result = await api.post('/api/individuals', formData);
+      }
+
+      onSave(result || formData);
       onClose();
-    }, 1000);
+    } catch (err) {
+      setApiError(err.message || 'An error occurred while saving');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{individual ? 'Edit Individual' : 'Add New Individual'}</DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid size={{ xs: 12, md: 6 }}>
+      <DialogContent dividers>
+        {apiError && <Alert severity="error" sx={{ mb: 2 }}>{apiError}</Alert>}
+        
+        <Grid container spacing={2} sx={{ mt: 0 }}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
               required
@@ -154,7 +139,7 @@ const IndividualForm = ({ open, onClose, onSave, individual }) => {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
               required
@@ -167,93 +152,55 @@ const IndividualForm = ({ open, onClose, onSave, individual }) => {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Autocomplete
-              fullWidth
-              options={roleOptions}
-              value={formData.role}
-              onChange={(event, newValue) => handleChange('role', newValue || '')}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  required
-                  label="Role"
-                  error={!!errors.role}
-                  helperText={errors.role}
-                />
-              )}
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Autocomplete
-              fullWidth
-              options={teamOptions}
-              value={formData.team}
-              onChange={(event, newValue) => handleChange('team', newValue || '')}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  required
-                  label="Team"
-                  error={!!errors.team}
-                  helperText={errors.team}
-                />
-              )}
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Autocomplete
-              fullWidth
-              options={locationOptions}
-              value={formData.location}
-              onChange={(event, newValue) => handleChange('location', newValue || '')}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  required
-                  label="Location"
-                  error={!!errors.location}
-                  helperText={errors.location}
-                />
-              )}
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
-              required
-              type="date"
-              label="Hire Date"
-              value={formData.hireDate}
-              onChange={(e) => handleChange('hireDate', e.target.value)}
-              error={!!errors.hireDate}
-              helperText={errors.hireDate}
-              InputLabelProps={{
-                shrink: true,
-              }}
+              label="Job Title"
+              placeholder="e.g. Senior Software Engineer"
+              value={formData.job_title}
+              onChange={(e) => handleChange('job_title', e.target.value)}
             />
           </Grid>
 
-          <Grid size={{ xs: 12 }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={formData.isDirect}
-                  onChange={(e) => handleChange('isDirect', e.target.checked)}
+          <Grid item xs={12} sm={6}>
+            <Autocomplete
+              fullWidth
+              options={systemRoleOptions}
+              value={formData.system_role}
+              onChange={(event, newValue) => handleChange('system_role', newValue || 'Employee')}
+              renderInput={(params) => (
+                <TextField 
+                  {...params} 
+                  required 
+                  label="System Role" 
+                  error={!!errors.system_role}
+                  helperText={errors.system_role}
                 />
-              }
-              label="Direct Employee"
+              )}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <Autocomplete
+              fullWidth
+              options={regionOptions}
+              value={formData.region}
+              onChange={(event, newValue) => handleChange('region', newValue || 'North America')}
+              renderInput={(params) => (
+                <TextField 
+                  {...params} 
+                  required 
+                  label="Region" 
+                  error={!!errors.region}
+                  helperText={errors.region}
+                />
+              )}
             />
           </Grid>
         </Grid>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
+        <Button onClick={onClose} disabled={loading}>Cancel</Button>
         <Button
           onClick={handleSubmit}
           variant="contained"
@@ -272,14 +219,13 @@ IndividualForm.propTypes = {
   onClose: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   individual: PropTypes.shape({
-    id: PropTypes.number,
+    _id: PropTypes.string,
+    id: PropTypes.string,
     name: PropTypes.string,
     email: PropTypes.string,
-    role: PropTypes.string,
-    team: PropTypes.string,
-    location: PropTypes.string,
-    hireDate: PropTypes.string,
-    isDirect: PropTypes.bool,
+    system_role: PropTypes.string,
+    region: PropTypes.string,
+    job_title: PropTypes.string,
   }),
 };
 

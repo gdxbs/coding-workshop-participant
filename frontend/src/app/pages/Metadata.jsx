@@ -41,6 +41,8 @@ const MetadataForm = ({ open, onClose, onSave, metadata }) => {
     }
   );
 
+  const [apiError, setApiError] = useState('');
+
   const handleChange = (field, value) => {
     setFormData({ ...formData, [field]: value });
     if (errors[field]) {
@@ -61,23 +63,40 @@ const MetadataForm = ({ open, onClose, onSave, metadata }) => {
     if (!validateForm()) return;
 
     setLoading(true);
-    setTimeout(() => {
-      const metadataData = {
+    setApiError('');
+
+    try {
+      const payload = {
         ...formData,
-        id: metadata ? metadata.id : Date.now(),
-        lastUpdated: new Date().toISOString().split('T')[0],
+        _id: formData.key, // Using key as _id for metadata consistency
+        lastUpdated: new Date().toISOString(),
       };
-      onSave(metadataData);
-      setLoading(false);
+
+      if (metadata) {
+        await api.put(`/api/metadata/${metadata._id || metadata.id}`, payload);
+      } else {
+        await api.post('/api/metadata', payload);
+      }
+
+      onSave();
       onClose();
-    }, 1000);
+    } catch (err) {
+      setApiError(err.message || 'An error occurred while saving metadata');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{metadata ? 'Edit Metadata' : 'Add New Metadata'}</DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 1 }}>
+      <DialogContent dividers>
+        {apiError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {apiError}
+          </Alert>
+        )}
+        <Grid container spacing={2} sx={{ mt: 0 }}>
           <Grid size={{ xs: 12 }}>
             <TextField
               fullWidth
@@ -152,19 +171,20 @@ const Metadata = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [selectedMetadata, setSelectedMetadata] = useState(null);
 
-  useEffect(() => {
-    const fetchMetadata = async () => {
-      try {
-        const data = await api.get('/api/metadata');
-        if (data) {
-          const formatted = data.map(m => ({ ...m, id: m._id }));
-          setMetadata(formatted);
-        }
-      } catch (err) {
-        showNotification('Failed to load metadata', 'error');
-        console.error(err);
+  const fetchMetadata = async () => {
+    try {
+      const data = await api.get('/api/metadata');
+      if (data) {
+        const formatted = data.map(m => ({ ...m, id: m._id }));
+        setMetadata(formatted);
       }
-    };
+    } catch (err) {
+      showNotification('Failed to load metadata', 'error');
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
     fetchMetadata();
   }, []);
 
@@ -192,25 +212,27 @@ const Metadata = () => {
     setFormOpen(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!hasPermission('delete')) {
       showNotification('You do not have permission to delete metadata', 'error');
       return;
     }
-    setMetadata(metadata.filter((item) => item.id !== id));
-    showNotification('Metadata deleted successfully', 'success');
+    
+    try {
+      await api.delete(`/api/metadata/${id}`);
+      fetchMetadata();
+      showNotification('Metadata deleted successfully', 'success');
+    } catch (err) {
+      showNotification(err.message || 'Failed to delete metadata', 'error');
+    }
   };
 
-  const handleSave = (metadataData) => {
-    if (selectedMetadata) {
-      setMetadata(
-        metadata.map((item) => (item.id === metadataData.id ? metadataData : item))
-      );
-      showNotification('Metadata updated successfully', 'success');
-    } else {
-      setMetadata([...metadata, metadataData]);
-      showNotification('Metadata added successfully', 'success');
-    }
+  const handleSave = () => {
+    fetchMetadata();
+    showNotification(
+      selectedMetadata ? 'Metadata updated successfully' : 'Metadata added successfully',
+      'success'
+    );
   };
 
   const columns = [

@@ -27,45 +27,46 @@ import AchievementForm from '../components/AchievementForm';
  * Displays and manages achievement data in a DataGrid
  */
 const Achievements = () => {
-  const { hasPermission } = useAuth();
+  const { currentUser, hasPermission } = useAuth();
   const { showNotification } = useNotification();
   const [achievements, setAchievements] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [selectedAchievement, setSelectedAchievement] = useState(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [achData, teamsData] = await Promise.all([
-          api.get('/api/achievements'),
-          api.get('/api/teams')
-        ]);
-        
-        const teamMap = {};
-        const leaderMap = {};
-        if (teamsData) {
-          teamsData.forEach(t => {
-            teamMap[t._id] = t.name;
-            leaderMap[t._id] = t.leader_id;
-          });
-        }
-        
-        if (achData) {
-          const formatted = achData.map(a => ({
-            ...a,
-            id: a._id,
-            team_name: teamMap[a.team_id] || a.team_id,
-            leader_id: leaderMap[a.team_id] || null
-          }));
-          setAchievements(formatted);
-        }
-      } catch (err) {
-        showNotification('Failed to load achievements', 'error');
-        console.error(err);
+  const fetchAchievementsData = async () => {
+    try {
+      const [achData, teamsData] = await Promise.all([
+        api.get('/api/achievements'),
+        api.get('/api/teams')
+      ]);
+      
+      const teamMap = {};
+      const leaderMap = {};
+      if (teamsData) {
+        teamsData.forEach(t => {
+          teamMap[t._id] = t.name;
+          leaderMap[t._id] = t.leader_id;
+        });
       }
-    };
-    fetchData();
+      
+      if (achData) {
+        const formatted = achData.map(a => ({
+          ...a,
+          id: a._id,
+          team_name: teamMap[a.team_id] || a.team_id,
+          leader_id: leaderMap[a.team_id] || null
+        }));
+        setAchievements(formatted);
+      }
+    } catch (err) {
+      showNotification('Failed to load achievements', 'error');
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAchievementsData();
   }, []);
 
   /**
@@ -116,20 +117,12 @@ const Achievements = () => {
   /**
    * Handle save achievement (create or update)
    */
-  const handleSave = (achievementData) => {
-    if (selectedAchievement) {
-      // Update existing achievement
-      setAchievements(
-        achievements.map((achievement) =>
-          achievement.id === achievementData.id ? achievementData : achievement
-        )
-      );
-      showNotification('Achievement updated successfully', 'success');
-    } else {
-      // Create new achievement
-      setAchievements([...achievements, achievementData]);
-      showNotification('Achievement logged successfully', 'success');
-    }
+  const handleSave = () => {
+    fetchAchievementsData();
+    showNotification(
+      selectedAchievement ? 'Achievement updated successfully' : 'Achievement logged successfully',
+      'success'
+    );
   };
 
 

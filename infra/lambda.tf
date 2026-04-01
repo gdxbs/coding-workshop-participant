@@ -16,11 +16,17 @@ module "lambda" {
   s3_bucket       = data.aws_caller_identity.this.id != "000000000000" ? var.aws_bucket : null
   s3_prefix       = data.aws_caller_identity.this.id != "000000000000" ? format("lambda/%s/%s/", local.app_id, each.value.name) : null
 
-  source_path = [{
-    path             = try(each.value.path, null)
-    patterns         = try(each.value.patterns, null)
-    pip_requirements = try(each.value.pip_requirements, null)
-  }]
+  source_path = [
+    {
+      path             = try(each.value.path, null)
+      patterns         = try(each.value.patterns, null)
+      pip_requirements = try(each.value.pip_requirements, null)
+    },
+    {
+      path          = abspath("${path.module}/../backend/shared")
+      prefix_in_zip = "shared"
+    }
+  ]
 
   vpc_security_group_ids = data.aws_security_groups.this.ids
   vpc_subnet_ids         = local.public_subnet_ids
@@ -76,7 +82,7 @@ resource "aws_sqs_queue" "this" {
 }
 
 resource "null_resource" "hot_reload" {
-  for_each = data.aws_caller_identity.this.id == "000000000000" ? local.function_names : tomap({})
+  for_each = data.aws_caller_identity.this.id == "000000000000" ? local.java_names : tomap({})
 
   triggers = {
     source_code_hash = module.lambda[each.key].lambda_function_source_code_hash

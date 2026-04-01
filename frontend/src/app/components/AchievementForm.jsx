@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import {
   Dialog,
@@ -11,19 +11,11 @@ import {
   CircularProgress,
   Autocomplete,
   MenuItem,
+  Alert,
 } from '@mui/material';
-
-const teamOptions = [
-  'Engineering - Platform',
-  'Engineering - Mobile',
-  'Product Management',
-  'Design & UX',
-  'Data Science',
-  'Marketing',
-];
+import { api } from '../../services/api';
 
 const categoryOptions = ['Technical', 'Product', 'Delivery', 'Process', 'Business'];
-
 const impactOptions = ['High', 'Medium', 'Low'];
 
 /**
@@ -31,27 +23,65 @@ const impactOptions = ['High', 'Medium', 'Low'];
  */
 const AchievementForm = ({ open, onClose, onSave, achievement }) => {
   const [loading, setLoading] = useState(false);
+  const [teams, setTeams] = useState([]);
   const [errors, setErrors] = useState({});
-  const [formData, setFormData] = useState(
-    achievement || {
-      title: '',
-      description: '',
-      team: '',
-      month: '',
-      category: '',
-      impact: 'Medium',
-      createdBy: '',
+  const [apiError, setApiError] = useState('');
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    team_id: '',
+    month: '',
+    category: '',
+    impact: 'Medium',
+  });
+
+  useEffect(() => {
+    if (open) {
+      fetchTeams();
+      if (achievement) {
+        setFormData({
+          title: achievement.title || '',
+          description: achievement.description || '',
+          team_id: achievement.team_id || '',
+          month: achievement.month || '',
+          category: achievement.category || '',
+          impact: achievement.impact || 'Medium',
+        });
+      } else {
+        setFormData({
+          title: '',
+          description: '',
+          team_id: '',
+          month: '',
+          category: '',
+          impact: 'Medium',
+        });
+      }
+      setErrors({});
+      setApiError('');
     }
-  );
+  }, [open, achievement]);
+
+  /**
+   * Fetch teams to populate selection list
+   */
+  const fetchTeams = async () => {
+    try {
+      const data = await api.get('/api/teams');
+      setTeams(data || []);
+    } catch (err) {
+      console.error('Failed to fetch teams', err);
+    }
+  };
 
   /**
    * Handle form field changes
    */
   const handleChange = (field, value) => {
-    setFormData({ ...formData, [field]: value });
-    // Clear error for this field
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors({ ...errors, [field]: '' });
+      setErrors((prev) => ({ ...prev, [field]: '' }));
     }
   };
 
@@ -61,24 +91,11 @@ const AchievementForm = ({ open, onClose, onSave, achievement }) => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
-    }
-    if (!formData.description.trim()) {
-      newErrors.description = 'Description is required';
-    }
-    if (!formData.team) {
-      newErrors.team = 'Team is required';
-    }
-    if (!formData.month) {
-      newErrors.month = 'Month is required';
-    }
-    if (!formData.category) {
-      newErrors.category = 'Category is required';
-    }
-    if (!formData.createdBy.trim()) {
-      newErrors.createdBy = 'Created by is required';
-    }
+    if (!formData.title.trim()) newErrors.title = 'Title is required';
+    if (!formData.description.trim()) newErrors.description = 'Description is required';
+    if (!formData.team_id) newErrors.team_id = 'Team is required';
+    if (!formData.month) newErrors.month = 'Month is required';
+    if (!formData.category) newErrors.category = 'Category is required';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -88,26 +105,27 @@ const AchievementForm = ({ open, onClose, onSave, achievement }) => {
    * Handle form submission
    */
   const handleSubmit = async () => {
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const achievementData = {
-        ...formData,
-        id: achievement ? achievement.id : Date.now(),
-        createdAt: achievement
-          ? achievement.createdAt
-          : new Date().toISOString().split('T')[0],
-      };
+    setApiError('');
 
-      onSave(achievementData);
-      setLoading(false);
+    try {
+      let result;
+      if (achievement && (achievement._id || achievement.id)) {
+        const id = achievement._id || achievement.id;
+        result = await api.put(`/api/achievements/${id}`, formData);
+      } else {
+        result = await api.post('/api/achievements', formData);
+      }
+
+      onSave(result || formData);
       onClose();
-    }, 1000);
+    } catch (err) {
+      setApiError(err.message || 'An error occurred while saving');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -115,9 +133,11 @@ const AchievementForm = ({ open, onClose, onSave, achievement }) => {
       <DialogTitle>
         {achievement ? 'Edit Achievement' : 'Log New Achievement'}
       </DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid size={{ xs: 12 }}>
+      <DialogContent dividers>
+        {apiError && <Alert severity="error" sx={{ mb: 2 }}>{apiError}</Alert>}
+        
+        <Grid container spacing={3} sx={{ mt: 0 }}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
               required
@@ -129,7 +149,7 @@ const AchievementForm = ({ open, onClose, onSave, achievement }) => {
             />
           </Grid>
 
-          <Grid size={{ xs: 12 }}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
               required
@@ -143,25 +163,26 @@ const AchievementForm = ({ open, onClose, onSave, achievement }) => {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid item xs={12} md={6}>
             <Autocomplete
               fullWidth
-              options={teamOptions}
-              value={formData.team}
-              onChange={(event, newValue) => handleChange('team', newValue || '')}
+              options={teams}
+              getOptionLabel={(option) => option.name || ''}
+              value={teams.find(t => t._id === formData.team_id) || null}
+              onChange={(event, newValue) => handleChange('team_id', newValue ? newValue._id : '')}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   required
                   label="Team"
-                  error={!!errors.team}
-                  helperText={errors.team}
+                  error={!!errors.team_id}
+                  helperText={errors.team_id}
                 />
               )}
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid item xs={12} md={6}>
             <TextField
               fullWidth
               required
@@ -177,7 +198,7 @@ const AchievementForm = ({ open, onClose, onSave, achievement }) => {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid item xs={12} md={6}>
             <Autocomplete
               fullWidth
               options={categoryOptions}
@@ -195,7 +216,7 @@ const AchievementForm = ({ open, onClose, onSave, achievement }) => {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid item xs={12} md={6}>
             <TextField
               fullWidth
               required
@@ -211,24 +232,10 @@ const AchievementForm = ({ open, onClose, onSave, achievement }) => {
               ))}
             </TextField>
           </Grid>
-
-          <Grid size={{ xs: 12 }}>
-            <TextField
-              fullWidth
-              required
-              label="Created By"
-              value={formData.createdBy}
-              onChange={(e) => handleChange('createdBy', e.target.value)}
-              error={!!errors.createdBy}
-              helperText={errors.createdBy}
-            />
-          </Grid>
         </Grid>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
+        <Button onClick={onClose} disabled={loading}>Cancel</Button>
         <Button
           onClick={handleSubmit}
           variant="contained"
@@ -247,14 +254,14 @@ AchievementForm.propTypes = {
   onClose: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   achievement: PropTypes.shape({
-    id: PropTypes.number,
+    _id: PropTypes.string,
+    id: PropTypes.string,
     title: PropTypes.string,
     description: PropTypes.string,
-    team: PropTypes.string,
+    team_id: PropTypes.string,
     month: PropTypes.string,
     category: PropTypes.string,
     impact: PropTypes.string,
-    createdBy: PropTypes.string,
     createdAt: PropTypes.string,
   }),
 };

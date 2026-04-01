@@ -14,7 +14,7 @@ def get_db_connection():
     """
     host = os.environ.get("MONGO_HOST")
     port = os.environ.get("MONGO_PORT")
-    db_name = os.environ.get("MONGO_NAME")
+    db_name = os.environ.get("MONGO_NAME") or "acme_team_mgmt"
     is_local = os.environ.get("IS_LOCAL", "true").lower() == "true"
     
     if not all([host, port, db_name]):
@@ -32,4 +32,4 @@ def get_db_connection():
     if not is_local:
         uri += "?tls=true&tlsAllowInvalidCertificates=true&retryWrites=false"
         
-    return MongoClient(uri)
+    return MongoClient(uri, serverSelectionTimeoutMS=5000)

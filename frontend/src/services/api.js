@@ -12,8 +12,21 @@ class ApiError extends Error {
 async function request(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`;
   
+  const authHeaders = {};
+  const userStr = localStorage.getItem('currentUser');
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      authHeaders['x-user-id'] = user._id;
+      authHeaders['x-system-role'] = user.system_role;
+    } catch (e) {
+      console.error("Failed to parse user", e);
+    }
+  }
+
   const headers = {
     'Content-Type': 'application/json',
+    ...authHeaders,
     ...(options.headers || {})
   };
 
@@ -39,15 +52,15 @@ async function request(endpoint, options = {}) {
         
         switch (response.status) {
             case 400:
-                throw new ApiError(400, errorData?.message || 'Bad Request', errorData);
+                throw new ApiError(400, errorData?.error || errorData?.message || 'Bad Request', errorData);
             case 403:
-                throw new ApiError(403, errorData?.message || 'Forbidden', errorData);
+                throw new ApiError(403, errorData?.error || errorData?.message || 'Forbidden', errorData);
             case 404:
-                throw new ApiError(404, errorData?.message || 'Not Found', errorData);
+                throw new ApiError(404, errorData?.error || errorData?.message || 'Not Found', errorData);
             case 500:
-                throw new ApiError(500, errorData?.message || 'Internal Server Error', errorData);
+                throw new ApiError(500, errorData?.error || errorData?.message || 'Internal Server Error', errorData);
             default:
-                throw new ApiError(response.status, errorData?.message || `HTTP Error ${response.status}`, errorData);
+                throw new ApiError(response.status, errorData?.error || errorData?.message || `HTTP Error ${response.status}`, errorData);
         }
     }
     
