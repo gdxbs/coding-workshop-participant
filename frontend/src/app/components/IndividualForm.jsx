@@ -106,9 +106,9 @@ const IndividualForm = ({ open, onClose, onSave, individual }) => {
       let result;
       if (individual && (individual._id || individual.id)) {
         const id = individual._id || individual.id;
-        result = await api.put(`/api/individuals/${id}`, formData);
+        result = await api.put(`/api/employees/${id}`, formData);
       } else {
-        result = await api.post('/api/individuals', formData);
+        result = await api.post('/api/employees', formData);
       }
 
       onSave(result || formData);

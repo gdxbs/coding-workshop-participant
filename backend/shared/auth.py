@@ -3,16 +3,7 @@ import json
 from functools import wraps
 from typing import Dict, Any, Callable
 from shared.db_utils import get_db_connection
-
-def build_auth_response(status_code: int, message: str) -> Dict[str, Any]:
-    return {
-        "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        },
-        "body": json.dumps({"error": message})
-    }
+from shared.response import build_auth_response
 
 def require_role_and_ownership(handler_func: Callable) -> Callable:
     """

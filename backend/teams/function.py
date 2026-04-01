@@ -4,42 +4,13 @@ Provides RESTful endpoints to perform CRUD operations on teams.
 """
 import os
 import json
-import datetime
 from typing import Dict, Any, Optional, Tuple
 
 from pymongo.errors import PyMongoError
 
 from shared.db_utils import get_db_connection
 from shared.auth import require_role_and_ownership
-
-
-class DateTimeEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, (datetime.datetime, datetime.date)):
-            return obj.isoformat()
-        return super().default(obj)
-
-def build_response(status_code: int, body: Any = None) -> Dict[str, Any]:
-    """
-    Constructs a standardized API Gateway response.
-
-    Args:
-        status_code (int): HTTP status code.
-        body (Any, optional): Data to serialize as JSON. Defaults to None.
-
-    Returns:
-        Dict[str, Any]: The fully formatted API Gateway response.
-    """
-    response: Dict[str, Any] = {
-        "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        }
-    }
-    if body is not None:
-        response["body"] = json.dumps(body, cls=DateTimeEncoder)
-    return response
+from shared.response import build_response
 
 
 @require_role_and_ownership

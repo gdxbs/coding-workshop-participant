@@ -64,7 +64,7 @@ const TeamForm = ({ open, onClose, onSave, team }) => {
    */
   const fetchIndividuals = async () => {
     try {
-      const data = await api.get('/api/individuals');
+      const data = await api.get('/api/employees');
       setIndividuals(data || []);
     } catch (err) {
       console.error('Failed to fetch individuals', err);
