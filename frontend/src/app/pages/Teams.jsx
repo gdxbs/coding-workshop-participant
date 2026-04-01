@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -16,7 +16,7 @@ import {
   Search as SearchIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import { mockTeams } from '../data/mockData';
+import { api } from '../../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import TeamForm from '../components/TeamForm';
@@ -28,10 +28,42 @@ import TeamForm from '../components/TeamForm';
 const Teams = () => {
   const { hasPermission } = useAuth();
   const { showNotification } = useNotification();
-  const [teams, setTeams] = useState(mockTeams);
+  const [teams, setTeams] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [teamsData, individualsData] = await Promise.all([
+          api.get('/api/teams'),
+          api.get('/api/individuals')
+        ]);
+        
+        const indMap = {};
+        if (individualsData) {
+          individualsData.forEach(ind => {
+            indMap[ind._id] = ind.name;
+          });
+        }
+        
+        if (teamsData) {
+          const formatted = teamsData.map(t => ({
+            ...t,
+            id: t._id,
+            leader_name: indMap[t.leader_id] || t.leader_id,
+            employee_count: t.employee_ids ? t.employee_ids.length : 0
+          }));
+          setTeams(formatted);
+        }
+      } catch (err) {
+        showNotification('Failed to load teams', 'error');
+        console.error(err);
+      }
+    };
+    fetchData();
+  }, []);
 
   /**
    * Filter teams based on search text
@@ -101,42 +133,30 @@ const Teams = () => {
       minWidth: 200,
     },
     {
-      field: 'leader',
+      field: 'organization',
+      headerName: 'Organization',
+      flex: 1,
+      minWidth: 150,
+    },
+    {
+      field: 'region',
+      headerName: 'Region',
+      flex: 1,
+      minWidth: 150,
+    },
+    {
+      field: 'leader_name',
       headerName: 'Team Leader',
       flex: 1,
       minWidth: 150,
     },
     {
-      field: 'location',
-      headerName: 'Location',
-      flex: 1,
-      minWidth: 150,
-    },
-    {
-      field: 'totalMembers',
+      field: 'employee_count',
       headerName: 'Total Members',
       width: 130,
       type: 'number',
     },
-    {
-      field: 'nonDirectRatio',
-      headerName: 'Non-Direct Ratio',
-      width: 150,
-      type: 'number',
-      valueFormatter: (value) => `${value.toFixed(2)}%`,
-    },
-    {
-      field: 'isCoLocated',
-      headerName: 'Co-Located',
-      width: 120,
-      type: 'boolean',
-    },
-    {
-      field: 'reportsToOrgLeader',
-      headerName: 'Reports to Org Leader',
-      width: 170,
-      type: 'boolean',
-    },
+
     {
       field: 'actions',
       headerName: 'Actions',
@@ -149,7 +169,7 @@ const Teams = () => {
             <IconButton
               size="small"
               onClick={() => handleEdit(params.row)}
-              disabled={!hasPermission('edit')}
+              disabled={!hasPermission('edit', params.row)}
               aria-label="edit team"
             >
               <EditIcon fontSize="small" />
@@ -159,7 +179,7 @@ const Teams = () => {
             <IconButton
               size="small"
               onClick={() => handleDelete(params.row.id)}
-              disabled={!hasPermission('delete')}
+              disabled={!hasPermission('delete', params.row)}
               aria-label="delete team"
             >
               <DeleteIcon fontSize="small" />

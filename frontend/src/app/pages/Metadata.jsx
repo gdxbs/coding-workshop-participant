@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -22,7 +22,7 @@ import {
   Search as SearchIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import { mockMetadata } from '../data/mockData';
+import { api } from '../../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 
@@ -147,10 +147,26 @@ const MetadataForm = ({ open, onClose, onSave, metadata }) => {
 const Metadata = () => {
   const { hasPermission } = useAuth();
   const { showNotification } = useNotification();
-  const [metadata, setMetadata] = useState(mockMetadata);
+  const [metadata, setMetadata] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [selectedMetadata, setSelectedMetadata] = useState(null);
+
+  useEffect(() => {
+    const fetchMetadata = async () => {
+      try {
+        const data = await api.get('/api/metadata');
+        if (data) {
+          const formatted = data.map(m => ({ ...m, id: m._id }));
+          setMetadata(formatted);
+        }
+      } catch (err) {
+        showNotification('Failed to load metadata', 'error');
+        console.error(err);
+      }
+    };
+    fetchMetadata();
+  }, []);
 
   const filteredMetadata = metadata.filter((item) =>
     Object.values(item).some((value) =>

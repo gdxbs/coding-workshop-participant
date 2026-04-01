@@ -20,6 +20,7 @@ import {
   Divider,
   Avatar,
   Chip,
+  Select,
 } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
 import {
@@ -82,7 +83,7 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
  * Implements responsive behavior for mobile and desktop views
  */
 const MainLayout = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, users, loginAs } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery({ maxWidth: 768 });
@@ -227,12 +228,23 @@ const MainLayout = () => {
           <Box sx={{ flexGrow: 1 }} />
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Chip
-              label={currentUser.role}
-              color={getRoleColor(currentUser.role)}
+            <Select
               size="small"
-              sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
-            />
+              value={currentUser?._id || ''}
+              onChange={(e) => loginAs(e.target.value)}
+              sx={{
+                display: { xs: 'none', sm: 'inline-flex' },
+                color: 'inherit',
+                '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.3)' },
+                '.MuiSvgIcon-root': { color: 'inherit' }
+              }}
+            >
+              {users.map((u) => (
+                <MenuItem key={u._id} value={u._id}>
+                  {u.name} ({u.system_role})
+                </MenuItem>
+              ))}
+            </Select>
             <IconButton
               size="large"
               edge="end"
@@ -267,8 +279,8 @@ const MainLayout = () => {
                 {currentUser.email}
               </Typography>
               <Chip
-                label={currentUser.role}
-                color={getRoleColor(currentUser.role)}
+                label={currentUser.system_role}
+                color={getRoleColor(currentUser.system_role)}
                 size="small"
                 sx={{ mt: 1 }}
               />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -17,7 +17,7 @@ import {
   Search as SearchIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import { mockAchievements } from '../data/mockData';
+import { api } from '../../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import AchievementForm from '../components/AchievementForm';
@@ -29,10 +29,44 @@ import AchievementForm from '../components/AchievementForm';
 const Achievements = () => {
   const { hasPermission } = useAuth();
   const { showNotification } = useNotification();
-  const [achievements, setAchievements] = useState(mockAchievements);
+  const [achievements, setAchievements] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [selectedAchievement, setSelectedAchievement] = useState(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [achData, teamsData] = await Promise.all([
+          api.get('/api/achievements'),
+          api.get('/api/teams')
+        ]);
+        
+        const teamMap = {};
+        const leaderMap = {};
+        if (teamsData) {
+          teamsData.forEach(t => {
+            teamMap[t._id] = t.name;
+            leaderMap[t._id] = t.leader_id;
+          });
+        }
+        
+        if (achData) {
+          const formatted = achData.map(a => ({
+            ...a,
+            id: a._id,
+            team_name: teamMap[a.team_id] || a.team_id,
+            leader_id: leaderMap[a.team_id] || null
+          }));
+          setAchievements(formatted);
+        }
+      } catch (err) {
+        showNotification('Failed to load achievements', 'error');
+        console.error(err);
+      }
+    };
+    fetchData();
+  }, []);
 
   /**
    * Filter achievements based on search text
@@ -98,21 +132,7 @@ const Achievements = () => {
     }
   };
 
-  /**
-   * Get impact color based on impact level
-   */
-  const getImpactColor = (impact) => {
-    switch (impact) {
-      case 'High':
-        return 'error';
-      case 'Medium':
-        return 'warning';
-      case 'Low':
-        return 'success';
-      default:
-        return 'default';
-    }
-  };
+
 
   const columns = [
     {
@@ -122,14 +142,8 @@ const Achievements = () => {
       minWidth: 250,
     },
     {
-      field: 'description',
-      headerName: 'Description',
-      flex: 1,
-      minWidth: 300,
-    },
-    {
-      field: 'team',
-      headerName: 'Team',
+      field: 'team_name',
+      headerName: 'Team Name',
       width: 180,
     },
     {
@@ -141,31 +155,7 @@ const Achievements = () => {
         return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
       },
     },
-    {
-      field: 'category',
-      headerName: 'Category',
-      width: 120,
-      renderCell: (params) => (
-        <Chip label={params.value} size="small" variant="outlined" />
-      ),
-    },
-    {
-      field: 'impact',
-      headerName: 'Impact',
-      width: 100,
-      renderCell: (params) => (
-        <Chip
-          label={params.value}
-          color={getImpactColor(params.value)}
-          size="small"
-        />
-      ),
-    },
-    {
-      field: 'createdBy',
-      headerName: 'Created By',
-      width: 150,
-    },
+
     {
       field: 'actions',
       headerName: 'Actions',
@@ -178,7 +168,7 @@ const Achievements = () => {
             <IconButton
               size="small"
               onClick={() => handleEdit(params.row)}
-              disabled={!hasPermission('edit')}
+              disabled={!hasPermission('edit', params.row)}
               aria-label="edit achievement"
             >
               <EditIcon fontSize="small" />
@@ -188,7 +178,7 @@ const Achievements = () => {
             <IconButton
               size="small"
               onClick={() => handleDelete(params.row.id)}
-              disabled={!hasPermission('delete')}
+              disabled={!hasPermission('delete', params.row)}
               aria-label="delete achievement"
             >
               <DeleteIcon fontSize="small" />

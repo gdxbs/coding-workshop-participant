@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -17,7 +17,7 @@ import {
   Search as SearchIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
-import { mockIndividuals } from '../data/mockData';
+import { api } from '../../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import IndividualForm from '../components/IndividualForm';
@@ -29,10 +29,26 @@ import IndividualForm from '../components/IndividualForm';
 const Individuals = () => {
   const { hasPermission } = useAuth();
   const { showNotification } = useNotification();
-  const [individuals, setIndividuals] = useState(mockIndividuals);
+  const [individuals, setIndividuals] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [selectedIndividual, setSelectedIndividual] = useState(null);
+
+  useEffect(() => {
+    const fetchIndividuals = async () => {
+      try {
+        const data = await api.get('/api/individuals');
+        if (data) {
+          const formatted = data.map(ind => ({ ...ind, id: ind._id }));
+          setIndividuals(formatted);
+        }
+      } catch (err) {
+        showNotification('Failed to load individuals', 'error');
+        console.error(err);
+      }
+    };
+    fetchIndividuals();
+  }, []);
 
   /**
    * Filter individuals based on search text
@@ -112,40 +128,23 @@ const Individuals = () => {
       minWidth: 220,
     },
     {
-      field: 'role',
-      headerName: 'Role',
+      field: 'system_role',
+      headerName: 'System Role',
       flex: 1,
       minWidth: 200,
-    },
-    {
-      field: 'team',
-      headerName: 'Team',
-      flex: 1,
-      minWidth: 180,
-    },
-    {
-      field: 'location',
-      headerName: 'Location',
-      flex: 1,
-      minWidth: 150,
-    },
-    {
-      field: 'hireDate',
-      headerName: 'Hire Date',
-      width: 120,
-      valueFormatter: (value) => new Date(value).toLocaleDateString(),
-    },
-    {
-      field: 'isDirect',
-      headerName: 'Employment Type',
-      width: 150,
       renderCell: (params) => (
         <Chip
-          label={params.value ? 'Direct' : 'Non-Direct'}
-          color={params.value ? 'success' : 'warning'}
+          label={params.value}
+          color={params.value === 'Admin' ? 'error' : 'primary'}
           size="small"
         />
       ),
+    },
+    {
+      field: 'region',
+      headerName: 'Region',
+      flex: 1,
+      minWidth: 150,
     },
     {
       field: 'actions',
@@ -159,7 +158,7 @@ const Individuals = () => {
             <IconButton
               size="small"
               onClick={() => handleEdit(params.row)}
-              disabled={!hasPermission('edit')}
+              disabled={!hasPermission('edit', params.row)}
               aria-label="edit individual"
             >
               <EditIcon fontSize="small" />
@@ -169,7 +168,7 @@ const Individuals = () => {
             <IconButton
               size="small"
               onClick={() => handleDelete(params.row.id)}
-              disabled={!hasPermission('delete')}
+              disabled={!hasPermission('delete', params.row)}
               aria-label="delete individual"
             >
               <DeleteIcon fontSize="small" />

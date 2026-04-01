@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -19,7 +19,7 @@ import {
   TrendingUp as TrendingUpIcon,
   EmojiEvents as EmojiEventsIcon,
 } from '@mui/icons-material';
-import { mockTeams, mockAchievements } from '../data/mockData';
+import { api } from '../../services/api';
 
 /**
  * Metric card component for displaying key statistics
@@ -58,15 +58,26 @@ const MetricCard = ({ title, value, icon: Icon, color }) => (
  * Displays overview of key metrics and recent achievements
  */
 const Dashboard = () => {
-  const totalTeams = mockTeams.length;
-  const totalIndividuals = mockTeams.reduce((sum, team) => sum + team.totalMembers, 0);
-  const nonCoLocatedLeaders = mockTeams.filter((team) => !team.isCoLocated).length;
-  const highNonDirectRatio = mockTeams.filter((team) => team.nonDirectRatio > 20).length;
-  const reportsToOrgLeader = mockTeams.filter((team) => team.reportsToOrgLeader).length;
+  const [teams, setTeams] = useState([]);
+  const [achievements, setAchievements] = useState([]);
 
-  const recentAchievements = mockAchievements
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, 5);
+  useEffect(() => {
+    Promise.all([
+      api.get('/api/teams').catch(() => []),
+      api.get('/api/achievements').catch(() => [])
+    ]).then(([t, a]) => {
+      if (t) setTeams(t);
+      if (a) setAchievements(a);
+    });
+  }, []);
+
+  const totalTeams = teams.length;
+  const totalIndividuals = teams.reduce((sum, team) => sum + (team.employee_ids ? team.employee_ids.length : 0), 0);
+  const nonCoLocatedLeaders = 0;
+  const highNonDirectRatio = 0;
+  const reportsToOrgLeader = 0;
+
+  const recentAchievements = achievements.slice(0, 5);
 
   /**
    * Get impact color based on impact level
@@ -201,7 +212,7 @@ const Dashboard = () => {
                               variant="outlined"
                             />
                             <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                              {new Date(achievement.createdAt).toLocaleDateString()}
+                              {achievement.month ? new Date(achievement.month).toLocaleDateString() : 'N/A'}
                             </Typography>
                           </Box>
                         </Box>
