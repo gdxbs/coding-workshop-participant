@@ -39,6 +39,15 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
+  # Remap S3 403 (Access Denied) to index.html for SPA client-side routing
+  custom_error_response {
+    error_code            = 403
+    error_caching_min_ttl = 300
+    response_code         = 200
+    response_page_path    = "/index.html"
+  }
+
+  # Remap S3 404 (Not Found) to index.html for SPA client-side routing
   custom_error_response {
     error_code            = 404
     error_caching_min_ttl = 300
