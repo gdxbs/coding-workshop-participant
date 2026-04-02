@@ -71,6 +71,7 @@ locals {
     POSTGRES_NAME = data.aws_caller_identity.this.id == "000000000000" ? "postgres" : element(aws_rds_cluster.this.*.database_name, 0)
     POSTGRES_USER = data.aws_caller_identity.this.id == "000000000000" ? "postgres" : element(aws_rds_cluster.this.*.master_username, 0)
     POSTGRES_PASS = data.aws_caller_identity.this.id == "000000000000" ? "postgres123!" : element(aws_rds_cluster.this.*.master_password, 0)
+    JWT_SECRET    = "change-me-to-a-real-secret"
   }
   iam_arns = [
     format("arn:%s:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole", data.aws_partition.this.partition),

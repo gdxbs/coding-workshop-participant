@@ -20,7 +20,6 @@ import {
   Divider,
   Avatar,
   Chip,
-  Select,
 } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
 import {
@@ -83,7 +82,7 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
  * Implements responsive behavior for mobile and desktop views
  */
 const MainLayout = () => {
-  const { currentUser, users, loginAs } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery({ maxWidth: 768 });
@@ -228,23 +227,6 @@ const MainLayout = () => {
           <Box sx={{ flexGrow: 1 }} />
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Select
-              size="small"
-              value={currentUser?._id || ''}
-              onChange={(e) => loginAs(e.target.value)}
-              sx={{
-                display: { xs: 'none', sm: 'inline-flex' },
-                color: 'inherit',
-                '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.3)' },
-                '.MuiSvgIcon-root': { color: 'inherit' }
-              }}
-            >
-              {users.map((u) => (
-                <MenuItem key={u._id} value={u._id}>
-                  {u.name} ({u.system_role})
-                </MenuItem>
-              ))}
-            </Select>
             <IconButton
               size="large"
               edge="end"
@@ -274,13 +256,13 @@ const MainLayout = () => {
             onClose={handleMenuClose}
           >
             <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="subtitle2">{currentUser.name}</Typography>
+              <Typography variant="subtitle2">{currentUser?.name}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {currentUser.email}
+                {currentUser?.email}
               </Typography>
               <Chip
-                label={currentUser.system_role}
-                color={getRoleColor(currentUser.system_role)}
+                label={currentUser?.system_role}
+                color={getRoleColor(currentUser?.system_role)}
                 size="small"
                 sx={{ mt: 1 }}
               />
@@ -288,7 +270,7 @@ const MainLayout = () => {
             <Divider />
             <MenuItem onClick={handleMenuClose}>Profile</MenuItem>
             <MenuItem onClick={handleMenuClose}>Settings</MenuItem>
-            <MenuItem onClick={handleMenuClose}>Logout</MenuItem>
+            <MenuItem onClick={() => { handleMenuClose(); logout(); navigate('/login'); }}>Logout</MenuItem>
           </Menu>
         </Toolbar>
       </AppBar>

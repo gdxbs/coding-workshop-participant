@@ -13,6 +13,10 @@ async function request(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`;
   
   const authHeaders = {};
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    authHeaders['Authorization'] = `Bearer ${token}`;
+  }
   const userStr = localStorage.getItem('currentUser');
   if (userStr) {
     try {
@@ -51,6 +55,15 @@ async function request(endpoint, options = {}) {
         }
         
         switch (response.status) {
+            case 401: {
+                const isAuthEndpoint = endpoint.includes('/auth/login');
+                if (!isAuthEndpoint) {
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('currentUser');
+                    window.location.href = '/login';
+                }
+                throw new ApiError(401, errorData?.error || errorData?.message || 'Unauthorized', errorData);
+            }
             case 400:
                 throw new ApiError(400, errorData?.error || errorData?.message || 'Bad Request', errorData);
             case 403:
@@ -79,11 +92,35 @@ async function request(endpoint, options = {}) {
   }
 }
 
+/**
+ * Sends a login request to the authentication endpoint.
+ * @param {string} email - The user's email address.
+ * @param {string} password - The user's password.
+ * @returns {Promise<{ token: string, user: Object }>} The auth token and user object.
+ */
+async function login(email, password) {
+  return request('/api/auth/login', {
+    method: 'POST',
+    body: { email, password },
+  });
+}
+
+/**
+ * Fetches the current user's profile using the stored auth token.
+ * @returns {Promise<Object>} The user profile object.
+ */
+async function fetchCurrentUser() {
+  return request('/api/auth/me', { method: 'GET' });
+}
+
 export const api = {
   get: (endpoint, options = {}) => request(endpoint, { ...options, method: 'GET' }),
   post: (endpoint, data, options = {}) => request(endpoint, { ...options, method: 'POST', body: data }),
   put: (endpoint, data, options = {}) => request(endpoint, { ...options, method: 'PUT', body: data }),
   delete: (endpoint, options = {}) => request(endpoint, { ...options, method: 'DELETE' }),
+  login,
+  fetchCurrentUser,
 };
 
+export { ApiError };
 export default api;

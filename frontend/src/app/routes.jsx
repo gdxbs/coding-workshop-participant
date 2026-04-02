@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, Navigate, useLocation, Outlet } from 'react-router';
 import MainLayout from './layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
 import Analytics from './pages/Analytics';
@@ -7,6 +7,27 @@ import Individuals from './pages/Individuals';
 import Achievements from './pages/Achievements';
 import Metadata from './pages/Metadata';
 import NotFound from './pages/NotFound';
+import Login from './pages/Login';
+import { useAuth } from './context/AuthContext';
+
+/**
+ * Route guard that redirects unauthenticated users to /login.
+ * @returns {React.ReactElement}
+ */
+function ProtectedRoute() {
+  const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return null;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return <Outlet />;
+}
 
 /**
  * Application router configuration
@@ -14,16 +35,25 @@ import NotFound from './pages/NotFound';
  */
 export const router = createBrowserRouter([
   {
-    path: '/',
-    Component: MainLayout,
+    path: '/login',
+    Component: Login,
+  },
+  {
+    Component: ProtectedRoute,
     children: [
-      { index: true, Component: Dashboard },
-      { path: 'analytics', Component: Analytics },
-      { path: 'teams', Component: Teams },
-      { path: 'individuals', Component: Individuals },
-      { path: 'achievements', Component: Achievements },
-      { path: 'metadata', Component: Metadata },
-      { path: '*', Component: NotFound },
+      {
+        path: '/',
+        Component: MainLayout,
+        children: [
+          { index: true, Component: Dashboard },
+          { path: 'analytics', Component: Analytics },
+          { path: 'teams', Component: Teams },
+          { path: 'individuals', Component: Individuals },
+          { path: 'achievements', Component: Achievements },
+          { path: 'metadata', Component: Metadata },
+          { path: '*', Component: NotFound },
+        ],
+      },
     ],
   },
 ]);

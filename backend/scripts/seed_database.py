@@ -1,10 +1,15 @@
 import pymongo
 from datetime import datetime
 import random
+from werkzeug.security import generate_password_hash
 
 # Connection string provided
 MONGO_URI = "mongodb://localhost:27017/"
 DB_NAME = "acme_team_mgmt"
+
+# Default password for all seeded employees
+DEFAULT_PASSWORD = "Password123!"
+DEFAULT_PASSWORD_HASH = generate_password_hash(DEFAULT_PASSWORD)
 
 def seed_database():
     print(f"Connecting to {MONGO_URI}...")
@@ -23,7 +28,7 @@ def seed_database():
     # 1. GENERATE INDIVIDUALS (51 Total)
     individuals_data = []
     # Fixed IDs to ensure Alice Smith is e_001 (Admin from NAM)
-    individuals_data.append({"_id": "e_001", "name": "Alice Smith", "email": "alice@acme.com", "system_role": "Admin", "region": "NAM"})
+    individuals_data.append({"_id": "e_001", "name": "Alice Smith", "email": "alice@acme.com", "system_role": "Admin", "region": "NAM", "password_hash": DEFAULT_PASSWORD_HASH})
     
     first_names = ["James", "Mary", "Robert", "Patricia", "John", "Jennifer", "Michael", "Linda", "William", "Elizabeth", "David", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen", "Christopher", "Nancy", "Daniel", "Lisa", "Matthew", "Betty", "Anthony", "Margaret", "Mark", "Sandra", "Donald", "Ashley", "Steven", "Kimberly", "Paul", "Emily", "Andrew", "Donna", "Joshua", "Michelle", "Kenneth", "Dorothy", "Kevin", "Carol", "Brian", "Amanda", "George", "Melissa", "Timothy", "Deborah"]
     last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores", "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts"]
@@ -37,7 +42,8 @@ def seed_database():
             "name": f"{fname} {lname}",
             "email": f"{fname.lower()}.{lname.lower()}@acme.com",
             "system_role": random.choice(roles) if i > 5 else "Admin", # Ensure some early admins
-            "region": random.choice(regions)
+            "region": random.choice(regions),
+            "password_hash": DEFAULT_PASSWORD_HASH
         })
 
     # 2. GENERATE TEAMS (16 Total)

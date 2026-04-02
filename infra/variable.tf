@@ -23,7 +23,7 @@ variable "aws_vpc_id" {
 }
 
 variable "aws_mongo_host" {
-  description = "MongoDB host for LocalStack. Defaults to 'host.docker.internal' (on Linux, set to '172.17.0.1')."
+  description = "MongoDB host for LocalStack. Defaults to '172.17.0.1' (Docker bridge gateway on Linux)."
   type        = string
-  default     = null
+  default     = "172.17.0.1"
 }

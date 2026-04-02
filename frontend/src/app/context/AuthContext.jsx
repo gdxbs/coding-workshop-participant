@@ -1,14 +1,13 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-
-const mockUsers = [
-  { _id: "e_001", name: "Alice Smith", system_role: "Admin", email: "alice.smith@acme.com" },
-  { _id: "e_002", name: "Bob Jones", system_role: "Employee", email: "bob.jones@acme.com" },
-  { _id: "e_003", name: "Charlie Davis", system_role: "Employee", email: "charlie.davis@acme.com" }
-];
+import { api } from '../../services/api';
 
 const AuthContext = createContext();
 
+/**
+ * Hook to access the auth context.
+ * @returns {Object} The auth context value.
+ */
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -17,54 +16,94 @@ export const useAuth = () => {
   return context;
 };
 
+/**
+ * Provides authentication state and helpers to the component tree.
+ * @param {{ children: React.ReactNode }} props
+ * @returns {React.ReactElement}
+ */
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(mockUsers[0]); // Default Alice
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  // Restore session on mount
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('currentUser');
-    }
-  }, [currentUser]);
+    const restoreSession = async () => {
+      const storedToken = localStorage.getItem('authToken');
+      if (!storedToken) {
+        setLoading(false);
+        return;
+      }
 
-  const loginAs = (userId) => {
-    const user = mockUsers.find(u => u._id === userId);
-    if (user) {
-      setCurrentUser(user);
-    } else {
-      console.warn(`Mock user with ID ${userId} not found`);
-    }
-  };
+      try {
+        const profile = await api.fetchCurrentUser();
+        setToken(storedToken);
+        setUser(profile);
+        setIsAuthenticated(true);
+        localStorage.setItem('currentUser', JSON.stringify(profile));
+      } catch (e) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const logout = () => {
-    setCurrentUser(null);
-  };
+    restoreSession();
+  }, []);
 
   /**
-   * Check if user has permission for a specific action on a specific resource
-   * @param {string} action - The action to check (create, edit, delete)
-   * @param {Object} resource - The resource being operated on (optional)
-   * @returns {boolean} Whether the user has permission
+   * Authenticate a user with email and password.
+   * @param {string} email
+   * @param {string} password
+   * @returns {Promise<void>}
    */
-  const hasPermission = (action, resource = null) => {
-    if (!currentUser) return false;
+  const login = useCallback(async (email, password) => {
+    const response = await api.login(email, password);
+    const { token: newToken, user: newUser } = response;
+
+    localStorage.setItem('authToken', newToken);
+    localStorage.setItem('currentUser', JSON.stringify(newUser));
+
+    setToken(newToken);
+    setUser(newUser);
+    setIsAuthenticated(true);
+  }, []);
+
+  /**
+   * Clear the session. Callers are responsible for redirecting to /login.
+   */
+  const logout = useCallback(() => {
+    setUser(null);
+    setToken(null);
+    setIsAuthenticated(false);
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('currentUser');
+  }, []);
+
+  /**
+   * Check if user has permission for a specific action on a specific resource.
+   * @param {string} action - The action to check (create, edit, delete).
+   * @param {Object} resource - The resource being operated on (optional).
+   * @returns {boolean} Whether the user has permission.
+   */
+  const hasPermission = useCallback((action, resource = null) => {
+    if (!user) return false;
     
     // Rule 1: Admins have full access
-    if (currentUser.system_role === 'Admin') {
+    if (user.system_role === 'Admin') {
       return true;
     }
     
     // Rule 2 & 3: Employees
-    if (currentUser.system_role === 'Employee') {
-      // Task 3: Ensure "Create New Team" remains accessible
+    if (user.system_role === 'Employee') {
       if (action === 'create') {
         return true;
       }
       
-      // Task 2: Edit/Delete active ONLY if current user is the leader
       if (action === 'edit' || action === 'delete') {
-        if (resource && resource.leader_id === currentUser._id) {
+        if (resource && resource.leader_id === user._id) {
           return true;
         }
         return false;
@@ -72,16 +111,19 @@ export const AuthProvider = ({ children }) => {
     }
     
     return false;
-  };
+  }, [user]);
 
   const value = {
-    currentUser,
-    users: mockUsers,
-    loginAs,
+    currentUser: user,
+    user,
+    token,
+    isAuthenticated,
+    loading,
+    login,
     logout,
     hasPermission,
-    isAdmin: currentUser?.system_role === 'Admin',
-    isEmployee: currentUser?.system_role === 'Employee'
+    isAdmin: user?.system_role === 'Admin',
+    isEmployee: user?.system_role === 'Employee',
   };
 
   return (
