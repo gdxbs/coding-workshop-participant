@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Box,
   Grid,
   Card,
   CardContent,
+  CardActionArea,
   Typography,
   Paper,
   List,
@@ -18,6 +20,7 @@ import {
   TrendingUp as TrendingUpIcon,
   EmojiEvents as EmojiEventsIcon,
   Business as BusinessIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import { api } from '../../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +31,7 @@ import {
 } from '../components/ui/chart';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import DashboardSkeleton from '../components/DashboardSkeleton';
+import EmptyState from '../components/EmptyState';
 
 /**
  * Metric card component for displaying key statistics
@@ -63,10 +67,14 @@ const MetricCard = ({ title, value, icon: Icon, color }) => (
 
 /**
  * Dashboard page component
- * Displays overview of key metrics and recent achievements
+ * Admins see a global overview with metrics and charts.
+ * Employees see their own teams as clickable cards.
  */
 const Dashboard = () => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const isAdmin = currentUser?.system_role === 'Admin';
+
   const [teams, setTeams] = useState([]);
   const [individuals, setIndividuals] = useState([]);
   const [achievements, setAchievements] = useState([]);
@@ -77,14 +85,19 @@ const Dashboard = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [t, i, a] = await Promise.all([
-          api.get('/api/teams').catch(() => []),
-          api.get('/api/employees').catch(() => []), 
-          api.get('/api/achievements').catch(() => [])
-        ]);
-        setTeams(t || []);
-        setIndividuals(i || []);
-        setAchievements(a || []);
+        if (isAdmin) {
+          const [t, i, a] = await Promise.all([
+            api.get('/api/teams').catch(() => []),
+            api.get('/api/employees').catch(() => []),
+            api.get('/api/achievements').catch(() => []),
+          ]);
+          setTeams(t || []);
+          setIndividuals(i || []);
+          setAchievements(a || []);
+        } else {
+          const t = await api.get('/api/teams').catch(() => []);
+          setTeams(t || []);
+        }
       } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
         setError("Failed to load dashboard data. Please try again later.");
@@ -94,7 +107,7 @@ const Dashboard = () => {
     };
 
     fetchData();
-  }, []);
+  }, [isAdmin]);
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -157,6 +170,80 @@ const Dashboard = () => {
       default: return 'default';
     }
   };
+
+  /* ---- Employee view: team cards ---- */
+  if (!isAdmin) {
+    return (
+      <Box sx={{ p: { xs: 2, md: 3 } }}>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h3" gutterBottom sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-0.02em' }}>
+            My Teams
+          </Typography>
+          <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 400 }}>
+            Welcome back, <Box component="span" sx={{ color: 'primary.main', fontWeight: 700 }}>{currentUser?.name || 'User'}</Box>.
+          </Typography>
+        </Box>
+
+        {teams.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <Grid container spacing={3}>
+            {teams.map((team) => (
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} key={team._id}>
+                <Card
+                  sx={{
+                    boxShadow: '0 4px 20px 0 rgba(0,0,0,0.05)',
+                    borderRadius: '16px',
+                    transition: 'box-shadow 0.2s, transform 0.2s',
+                    '&:hover': {
+                      boxShadow: '0 8px 30px 0 rgba(0,0,0,0.12)',
+                      transform: 'translateY(-2px)',
+                    },
+                  }}
+                >
+                  <CardActionArea onClick={() => navigate(`/teams/${team._id}`)}>
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                        <Box
+                          sx={{
+                            backgroundColor: 'primary.light',
+                            borderRadius: '12px',
+                            p: 1.5,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <GroupsIcon sx={{ fontSize: 28, color: 'primary.main' }} />
+                        </Box>
+                        <ChevronRightIcon sx={{ color: 'text.disabled' }} />
+                      </Box>
+                      <Typography variant="h6" sx={{ fontWeight: 800, mb: 0.5 }}>
+                        {team.name}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        {team.region && (
+                          <Chip label={team.region} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
+                        )}
+                        {team.organization && (
+                          <Chip label={team.organization} size="small" sx={{ fontWeight: 600 }} />
+                        )}
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5, fontWeight: 500 }}>
+                        {team.employee_ids ? team.employee_ids.length : 0} members
+                      </Typography>
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
+      </Box>
+    );
+  }
+
+  /* ---- Admin view: global overview ---- */
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>

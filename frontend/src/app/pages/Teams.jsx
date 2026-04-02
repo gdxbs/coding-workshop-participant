@@ -26,7 +26,7 @@ import TeamForm from '../components/TeamForm';
  * Displays and manages team data in a DataGrid
  */
 const Teams = () => {
-  const { currentUser, hasPermission } = useAuth();
+  const { currentUser, hasPermission, isAdmin } = useAuth();
   const { showNotification } = useNotification();
   const [teams, setTeams] = useState([]);
   const [searchText, setSearchText] = useState('');
@@ -79,7 +79,7 @@ const Teams = () => {
    * Handle create new team
    */
   const handleCreate = () => {
-    if (!hasPermission('create')) {
+    if (!isAdmin) {
       showNotification('You do not have permission to create teams', 'error');
       return;
     }
@@ -202,7 +202,7 @@ const Teams = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleCreate}
-          disabled={!hasPermission('create')}
+          disabled={!isAdmin}
         >
           Add Team
         </Button>

@@ -27,7 +27,7 @@ import IndividualForm from '../components/IndividualForm';
  * Displays and manages individual employee data in a DataGrid
  */
 const Individuals = () => {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isAdmin } = useAuth();
   const { showNotification } = useNotification();
   const [individuals, setIndividuals] = useState([]);
   const [searchText, setSearchText] = useState('');
@@ -64,7 +64,7 @@ const Individuals = () => {
    * Handle create new individual
    */
   const handleCreate = () => {
-    if (!hasPermission('create')) {
+    if (!isAdmin) {
       showNotification('You do not have permission to add individuals', 'error');
       return;
     }
@@ -187,7 +187,7 @@ const Individuals = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleCreate}
-          disabled={!hasPermission('create')}
+          disabled={!isAdmin}
         >
           Add Individual
         </Button>

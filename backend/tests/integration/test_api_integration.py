@@ -12,12 +12,11 @@ def create_api_event(http_method, path, path_parameters=None, body=None):
         "httpMethod": http_method,
         "path": path,
         "pathParameters": path_parameters,
-        "requestContext": {
-            "authorizer": {
-                "user_id": "integration_admin",
-                "system_role": "Admin"
-            }
+        "headers": {
+            "x-user-id": "integration_admin",
+            "x-system-role": "Admin",
         },
+        "requestContext": {},
         "body": json.dumps(body) if body else None
     }
 

@@ -33,12 +33,11 @@ def create_event(http_method, path, user_id="test_admin", system_role="Admin", b
     return {
         "httpMethod": http_method,
         "path": path,
-        "requestContext": {
-            "authorizer": {
-                "user_id": user_id,
-                "system_role": system_role
-            }
+        "headers": {
+            "x-user-id": user_id,
+            "x-system-role": system_role,
         },
+        "requestContext": {},
         "pathParameters": path_parameters,
         "body": json.dumps(body) if body else None
     }

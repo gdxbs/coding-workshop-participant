@@ -35,19 +35,19 @@ def sample_achievement():
 def sample_team():
     return {
         "_id": "t_001",
-        "leader_id": "e_001"
+        "leader_id": "e_001",
+        "employee_ids": ["e_001", "e_002"],
     }
 
 def create_event(http_method, path, user_id="test_admin", system_role="Admin", body=None, path_parameters=None):
     return {
         "httpMethod": http_method,
         "path": path,
-        "requestContext": {
-            "authorizer": {
-                "user_id": user_id,
-                "system_role": system_role
-            }
+        "headers": {
+            "x-user-id": user_id,
+            "x-system-role": system_role,
         },
+        "requestContext": {},
         "pathParameters": path_parameters,
         "body": json.dumps(body) if body else None
     }
@@ -91,3 +91,44 @@ def test_employee_delete_allowed(mock_db, sample_achievement, sample_team):
     event = create_event("DELETE", f"/achievements/{sample_achievement['_id']}", user_id="e_001", system_role="Employee", path_parameters={"id": sample_achievement["_id"]})
     response = handler(event, None)
     assert response.get("statusCode") == 204
+
+
+def test_employee_list_achievements_scoped(mock_db, sample_team):
+    """Employee list returns only achievements for teams they belong to."""
+    mock_db["test_db"]["teams"].insert_one(sample_team)
+    other_team = {"_id": "t_002", "leader_id": "e_999", "employee_ids": ["e_999"]}
+    mock_db["test_db"]["teams"].insert_one(other_team)
+
+    mock_db["test_db"]["achievements"].insert_one(
+        {"_id": "a_001", "team_id": "t_001", "title": "Own", "month": "Jan"}
+    )
+    mock_db["test_db"]["achievements"].insert_one(
+        {"_id": "a_002", "team_id": "t_002", "title": "Other", "month": "Feb"}
+    )
+
+    event = create_event("GET", "/achievements", user_id="e_002", system_role="Employee")
+    response = handler(event, None)
+    assert response.get("statusCode") == 200
+    body = json.loads(response["body"])
+    assert len(body) == 1
+    assert body[0]["_id"] == "a_001"
+
+
+def test_admin_list_achievements_all(mock_db, sample_team):
+    """Admin list returns all achievements regardless of team membership."""
+    mock_db["test_db"]["teams"].insert_one(sample_team)
+    other_team = {"_id": "t_002", "leader_id": "e_999", "employee_ids": ["e_999"]}
+    mock_db["test_db"]["teams"].insert_one(other_team)
+
+    mock_db["test_db"]["achievements"].insert_one(
+        {"_id": "a_001", "team_id": "t_001", "title": "Own", "month": "Jan"}
+    )
+    mock_db["test_db"]["achievements"].insert_one(
+        {"_id": "a_002", "team_id": "t_002", "title": "Other", "month": "Feb"}
+    )
+
+    event = create_event("GET", "/achievements", user_id="admin_1", system_role="Admin")
+    response = handler(event, None)
+    assert response.get("statusCode") == 200
+    body = json.loads(response["body"])
+    assert len(body) == 2

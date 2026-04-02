@@ -17,8 +17,8 @@ def seed_database():
     db = client[DB_NAME]
 
     # Clear existing collections for a fresh start
-    print("Clearing existing collections (employees, teams, achievements)...")
-    for collection in ["teams", "employees", "achievements"]:
+    print("Clearing existing collections (employees, teams, achievements, metadata)...")
+    for collection in ["teams", "employees", "achievements", "metadata"]:
         db[collection].drop()
 
     regions = ["NAM", "LATAM", "APAC", "EU"]
@@ -120,6 +120,27 @@ def seed_database():
     db.teams.insert_many(teams_data)
     print(f"Inserting {len(achievements_data)} achievements...")
     db.achievements.insert_many(achievements_data)
+
+    # 4. GENERATE METADATA (15 entries)
+    metadata_data = [
+        {"_id": "app_version", "category": "System", "key": "app_version", "value": "2.4.1", "description": "Current application version", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "max_team_size", "category": "Thresholds", "key": "max_team_size", "value": "5", "description": "Maximum number of members allowed per team", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "default_region", "category": "Regions", "key": "default_region", "value": "NAM", "description": "Default region for new employees", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "supported_regions", "category": "Regions", "key": "supported_regions", "value": "NAM,LATAM,APAC,EU", "description": "Comma-separated list of supported regions", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "achievement_impacts", "category": "System", "key": "achievement_impacts", "value": "High,Medium,Low", "description": "Available impact levels for achievements", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "enable_notifications", "category": "Feature Flags", "key": "enable_notifications", "value": "true", "description": "Enable in-app notifications for users", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "enable_analytics", "category": "Feature Flags", "key": "enable_analytics", "value": "true", "description": "Enable the analytics dashboard page", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "enable_export", "category": "Feature Flags", "key": "enable_export", "value": "false", "description": "Enable CSV/PDF export functionality", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "session_timeout_minutes", "category": "Thresholds", "key": "session_timeout_minutes", "value": "60", "description": "Session timeout duration in minutes", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "password_min_length", "category": "Thresholds", "key": "password_min_length", "value": "8", "description": "Minimum password length for new accounts", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "org_credit_cards", "category": "Organizations", "key": "org_credit_cards", "value": "Credit Cards", "description": "Credit Cards business unit", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "org_private_banking", "category": "Organizations", "key": "org_private_banking", "value": "Private Banking", "description": "Private Banking business unit", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "org_enterprise_tech", "category": "Organizations", "key": "org_enterprise_tech", "value": "Enterprise Tech", "description": "Enterprise Tech business unit", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "maintenance_mode", "category": "Feature Flags", "key": "maintenance_mode", "value": "false", "description": "Put the application in maintenance mode", "lastUpdated": datetime.utcnow().isoformat()},
+        {"_id": "api_rate_limit", "category": "Thresholds", "key": "api_rate_limit", "value": "1000", "description": "Maximum API requests per minute per user", "lastUpdated": datetime.utcnow().isoformat()},
+    ]
+    print(f"Inserting {len(metadata_data)} metadata entries...")
+    db.metadata.insert_many(metadata_data)
 
     # Indexes
     print("Creating indexes...")

@@ -1,7 +1,7 @@
 import os
 import json
 from functools import wraps
-from typing import Dict, Any, Callable, Optional, Tuple
+from typing import Dict, Any, Callable, List, Optional, Tuple
 
 import jwt
 
@@ -12,7 +12,7 @@ from shared.response import build_auth_response
 JWT_SECRET: str = os.environ.get("JWT_SECRET", "change-me-to-a-real-secret")
 JWT_ALGORITHM: str = "HS256"
 
-RESERVED_SEGMENTS = {"teams", "individuals", "employees", "achievements", "metadata", "api"}
+RESERVED_SEGMENTS = {"teams", "individuals", "employees", "achievements", "metadata", "api", "hub"}
 
 
 def _extract_http_method(event: Dict[str, Any]) -> str:
@@ -40,8 +40,7 @@ def _extract_entity_id(event: Dict[str, Any]) -> Optional[str]:
 
     raw_path = event.get("rawPath", "") or event.get("path", "")
     parts = [p for p in raw_path.split("/") if p]
-    if parts:
-        candidate = parts[-1]
+    for candidate in reversed(parts):
         if candidate not in RESERVED_SEGMENTS:
             return candidate
     return None
@@ -55,6 +54,23 @@ def _parse_body(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Option
         return data, None
     except json.JSONDecodeError:
         return None, build_auth_response(400, "Invalid JSON body")
+
+
+def _get_user_team_ids(db: Any, user_id: str) -> List[str]:
+    """Return list of team _ids where the user is a member or leader."""
+    cursor = db.teams.find(
+        {"$or": [{"leader_id": user_id}, {"employee_ids": user_id}]},
+        {"_id": 1},
+    )
+    return [t["_id"] for t in cursor]
+
+
+def _is_team_member(db: Any, user_id: str, team_id: str) -> bool:
+    """Check whether the user is a member or leader of a specific team."""
+    team = db.teams.find_one({"_id": team_id})
+    if not team:
+        return False
+    return user_id == team.get("leader_id") or user_id in team.get("employee_ids", [])
 
 
 def decode_token(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
@@ -82,14 +98,19 @@ def decode_token(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optio
 
 
 def require_role_and_ownership(handler_func: Callable) -> Callable:
-    """Decorator that enforces JWT authentication and RBAC.
+    """Decorator that enforces JWT authentication and three-tier RBAC.
 
-    Rules:
-        - Admin: full access to all endpoints.
-        - Employee: read-only (GET) globally. For POST/PUT/DELETE the
-          employee's ``_id`` (from the JWT ``sub`` claim) must match the
-          ``leader_id`` of the relevant team resource; otherwise 403.
-        - Metadata: only Admin may write.
+    Roles:
+        - **Admin**: Global access to all endpoints and methods.
+        - **Team Leader** (dynamic): An Employee whose ``_id`` matches
+          ``team.leader_id`` for the resource being accessed.  Grants
+          write access (POST/PUT/DELETE) to that team and its
+          achievements/metadata.
+        - **Employee**: Read-only access scoped to teams the employee
+          belongs to (as leader or member via ``employee_ids``).  No
+          write privileges unless the employee is the Team Leader of the
+          target resource.
+        - Metadata writes are reserved for Admin only.
     """
     @wraps(handler_func)
     def wrapper(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -111,29 +132,60 @@ def require_role_and_ownership(handler_func: Callable) -> Callable:
         if not system_role:
             return build_auth_response(401, "Unauthorized: Missing system_role in token")
 
+        # Inject auth context so downstream handlers can use it
+        event["auth_context"] = {"user_id": user_id, "system_role": system_role}
+
         # --- 2. Admin -> full access ---
         if system_role == "Admin":
             return handler_func(event, context)
 
-        # --- 3. Employee rules ---
+        # --- 3. Employee / Team Leader (dynamic) rules ---
         if system_role == "Employee":
             http_method = _extract_http_method(event)
             path = _extract_path(event)
 
-            # GET is always allowed
+            try:
+                client = get_db_connection()
+                db_name = os.environ.get("MONGO_NAME", "acme_team_mgmt")
+                db = client[db_name]
+            except Exception as e:
+                return build_auth_response(
+                    500,
+                    f"Authentication Error: Database connection failed. Details: {str(e)}",
+                )
+
+            # --- GET (scoped reads) ---
             if http_method == "GET":
+                if "/teams" in path:
+                    entity_id = _extract_entity_id(event)
+                    if entity_id:
+                        # Single team – must be a member
+                        if not _is_team_member(db, user_id, entity_id):
+                            return build_auth_response(
+                                403, "Access Denied: You are not a member of this team"
+                            )
+                    else:
+                        # List – attach user's team IDs for handler filtering
+                        event["auth_context"]["team_ids"] = _get_user_team_ids(db, user_id)
+
+                elif "/achievements" in path:
+                    entity_id = _extract_entity_id(event)
+                    if entity_id:
+                        achievement = db.achievements.find_one({"_id": entity_id})
+                        if achievement and not _is_team_member(
+                            db, user_id, achievement.get("team_id", "")
+                        ):
+                            return build_auth_response(
+                                403, "Access Denied: You are not a member of the associated team"
+                            )
+                    else:
+                        event["auth_context"]["team_ids"] = _get_user_team_ids(db, user_id)
+
+                # /employees and /metadata remain globally readable
                 return handler_func(event, context)
 
+            # --- WRITE (POST / PUT / DELETE) ---
             if http_method in ("POST", "PUT", "DELETE"):
-                try:
-                    client = get_db_connection()
-                    db_name = os.environ.get("MONGO_NAME", "acme_team_mgmt")
-                    db = client[db_name]
-                except Exception as e:
-                    return build_auth_response(
-                        500,
-                        f"Authentication Error: Database connection failed. Details: {str(e)}"
-                    )
 
                 # --- POST ---
                 if http_method == "POST":
@@ -143,17 +195,23 @@ def require_role_and_ownership(handler_func: Callable) -> Callable:
 
                     if "/teams" in path:
                         if data.get("leader_id") != user_id:
-                            return build_auth_response(403, "Access Denied: Employee cannot create a team for another leader")
+                            return build_auth_response(
+                                403, "Access Denied: Employee cannot create a team for another leader"
+                            )
                     elif "/individuals" in path or "/employees" in path:
                         if data.get("_id") != user_id:
-                            return build_auth_response(403, "Access Denied: Employee cannot create a profile for another user")
+                            return build_auth_response(
+                                403, "Access Denied: Employee cannot create a profile for another user"
+                            )
                     elif "/achievements" in path:
                         team_id = data.get("team_id")
                         if not team_id:
                             return build_auth_response(400, "Missing team_id in achievement payload")
                         team = db.teams.find_one({"_id": team_id})
                         if not team or team.get("leader_id") != user_id:
-                            return build_auth_response(403, "Access Denied: You are not the leader of this team")
+                            return build_auth_response(
+                                403, "Access Denied: You are not the leader of this team"
+                            )
                     elif "/metadata" in path:
                         return build_auth_response(403, "Access Denied: Only Admin can modify metadata")
 
@@ -166,16 +224,23 @@ def require_role_and_ownership(handler_func: Callable) -> Callable:
                     if "/teams" in path:
                         team = db.teams.find_one({"_id": entity_id})
                         if not team or team.get("leader_id") != user_id:
-                            return build_auth_response(403, "Access Denied: You do not own this resource")
+                            return build_auth_response(
+                                403, "Access Denied: You do not own this resource"
+                            )
                     elif "/individuals" in path or "/employees" in path:
                         if entity_id != user_id:
-                            return build_auth_response(403, "Access Denied: You can only edit your own profile")
+                            return build_auth_response(
+                                403, "Access Denied: You can only edit your own profile"
+                            )
                     elif "/achievements" in path:
                         achievement = db.achievements.find_one({"_id": entity_id})
                         if achievement:
                             team = db.teams.find_one({"_id": achievement.get("team_id")})
                             if not team or team.get("leader_id") != user_id:
-                                return build_auth_response(403, "Access Denied: You are not the leader of the associated team")
+                                return build_auth_response(
+                                    403,
+                                    "Access Denied: You are not the leader of the associated team",
+                                )
                     elif "/metadata" in path:
                         return build_auth_response(403, "Access Denied: Only Admin can modify metadata")
 

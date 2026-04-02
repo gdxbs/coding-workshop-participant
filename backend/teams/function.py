@@ -30,20 +30,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         http_method: str = (event.get("httpMethod") or event.get("requestContext", {}).get("http", {}).get("method") or event.get("method") or "").upper()
         path_parameters: Optional[Dict[str, str]] = event.get("pathParameters") or {}
         body: str = event.get("body", "")
+        raw_path: str = event.get("rawPath", "") or event.get("path", "")
+        is_hub_request: bool = raw_path.rstrip("/").endswith("/hub")
         
         team_id: Optional[str] = path_parameters.get("id")
-        RESERVED_IDS = ["teams", "individuals", "employees", "achievements", "metadata", "api"]
+        RESERVED_IDS = ["teams", "individuals", "employees", "achievements", "metadata", "api", "hub"]
         if team_id in RESERVED_IDS:
             team_id = None
         
         # Fallback for V2 Function URLs
         if not team_id:
-            raw_path = event.get("rawPath", "") or event.get("path", "")
             parts = [p for p in raw_path.split("/") if p]
-            if parts:
-                possible_id = parts[-1]
-                if possible_id not in RESERVED_IDS:
-                    team_id = possible_id
+            for candidate in reversed(parts):
+                if candidate not in RESERVED_IDS:
+                    team_id = candidate
+                    break
 
         client = get_db_connection()
         db_name: str = os.environ.get("MONGO_NAME", "acme_team_mgmt")
@@ -53,14 +54,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if http_method == "POST":
             return create_team(collection, body)
         elif http_method == "GET":
-            if team_id:
+            if is_hub_request:
+                if not team_id:
+                    return build_response(400, {"error": "Missing team ID"})
+                return get_team_hub(db, team_id)
+            elif team_id:
                 return get_team(collection, team_id)
             else:
-                return list_teams(collection)
+                return list_teams(collection, event)
         elif http_method == "PUT":
             if not team_id:
                 return build_response(400, {"error": "Missing team ID"})
-            return update_team(collection, team_id, body)
+            return update_team(collection, team_id, body, db)
         elif http_method == "DELETE":
             if not team_id:
                 return build_response(400, {"error": "Missing team ID"})
@@ -114,17 +119,29 @@ def create_team(collection: Any, body_str: str) -> Dict[str, Any]:
     return build_response(201, data)
 
 
-def list_teams(collection: Any) -> Dict[str, Any]:
+def list_teams(collection: Any, event: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Retrieves all teams from the database.
+    Retrieves teams from the database.
+
+    For Admin users all teams are returned.  For Employee users the list
+    is scoped to teams supplied in ``event["auth_context"]["team_ids"]``
+    by the authorization middleware.
 
     Args:
         collection (Any): The database collection.
+        event (Dict[str, Any]): The API Gateway event (carries auth_context).
 
     Returns:
         Dict[str, Any]: HTTP Response containing list of teams.
     """
-    teams_cursor = collection.find({})
+    auth_ctx: Dict[str, Any] = event.get("auth_context", {})
+    team_ids: Optional[list] = auth_ctx.get("team_ids")
+
+    if team_ids is not None:
+        teams_cursor = collection.find({"_id": {"$in": team_ids}})
+    else:
+        teams_cursor = collection.find({})
+
     teams_list = list(teams_cursor)
     return build_response(200, teams_list)
 
@@ -146,14 +163,57 @@ def get_team(collection: Any, team_id: str) -> Dict[str, Any]:
     return build_response(200, team)
 
 
-def update_team(collection: Any, team_id: str, body_str: str) -> Dict[str, Any]:
+def get_team_hub(db: Any, team_id: str) -> Dict[str, Any]:
+    """Return a unified Team Hub view aggregating related collections.
+
+    Fetches the team document, member profiles (excluding password
+    hashes), achievements, and metadata for a single team.
+
+    Args:
+        db (Any): The database handle for cross-collection queries.
+        team_id (str): The unique identifier of the team.
+
+    Returns:
+        Dict[str, Any]: HTTP Response with the aggregated hub payload.
+    """
+    team = db.teams.find_one({"_id": team_id})
+    if not team:
+        return build_response(404, {"error": "Team not found"})
+
+    employee_ids = team.get("employee_ids", [])
+    members = list(
+        db.employees.find(
+            {"_id": {"$in": employee_ids}},
+            {"password_hash": 0},
+        )
+    )
+
+    achievements = list(db.achievements.find({"team_id": team_id}))
+
+    metadata = list(db.metadata.find({"team_id": team_id}))
+
+    return build_response(200, {
+        "team": team,
+        "members": members,
+        "achievements": achievements,
+        "metadata": metadata,
+    })
+
+
+def update_team(collection: Any, team_id: str, body_str: str, db: Any = None) -> Dict[str, Any]:
     """
     Updates an existing team.
 
+    If the caller changes ``leader_id`` to a different employee, the
+    update still completes (leadership transfer).  The new leader must
+    exist in the ``employees`` collection.  Subsequent requests by the
+    old leader will be rejected by the authorization middleware.
+
     Args:
-        collection (Any): The database collection.
+        collection (Any): The teams database collection.
         team_id (str): The unique identifier of the team.
         body_str (str): JSON string containing updated properties.
+        db (Any): The database handle (used for cross-collection lookups).
 
     Returns:
         Dict[str, Any]: HTTP Response indicating success or failure.
@@ -167,12 +227,23 @@ def update_team(collection: Any, team_id: str, body_str: str) -> Dict[str, Any]:
     if employee_ids is not None and len(employee_ids) > 5:
         return build_response(400, {"error": "A team can have a maximum of 5 employees."})
 
+    # --- Leadership transfer validation ---
+    new_leader_id: Optional[str] = data.get("leader_id")
+    if new_leader_id and db is not None:
+        current_team = collection.find_one({"_id": team_id})
+        if current_team and new_leader_id != current_team.get("leader_id"):
+            employee_exists = db.employees.find_one({"_id": new_leader_id})
+            if not employee_exists:
+                return build_response(
+                    400, {"error": "New leader_id does not reference an existing employee"}
+                )
+
     # Perform the update
     result = collection.update_one({"_id": team_id}, {"$set": data})
-    
+
     if result.matched_count == 0:
         return build_response(404, {"error": "Team not found"})
-        
+
     return build_response(200, {"message": "Team updated"})
 
 

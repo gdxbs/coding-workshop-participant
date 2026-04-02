@@ -38,7 +38,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if achievement_id:
                 return get_achievement(collection, achievement_id)
             else:
-                return list_achievements(collection)
+                return list_achievements(collection, event)
         elif http_method == "PUT":
             if not achievement_id:
                 return build_response(400, {"error": "Missing achievement ID"})
@@ -75,8 +75,15 @@ def create_achievement(collection: Any, body_str: str) -> Dict[str, Any]:
     collection.insert_one(data)
     return build_response(201, data)
 
-def list_achievements(collection: Any) -> Dict[str, Any]:
-    cursor = collection.find({})
+def list_achievements(collection: Any, event: Dict[str, Any]) -> Dict[str, Any]:
+    """Return achievements, scoped to the caller's teams for non-Admin users."""
+    auth_ctx: Dict[str, Any] = event.get("auth_context", {})
+    team_ids = auth_ctx.get("team_ids")
+
+    if team_ids is not None:
+        cursor = collection.find({"team_id": {"$in": team_ids}})
+    else:
+        cursor = collection.find({})
     return build_response(200, list(cursor))
 
 def get_achievement(collection: Any, achievement_id: str) -> Dict[str, Any]:
