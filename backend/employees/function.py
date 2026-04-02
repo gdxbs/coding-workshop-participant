@@ -2,9 +2,12 @@ import os
 import json
 from typing import Dict, Any, Optional
 from pymongo.errors import PyMongoError
+from werkzeug.security import generate_password_hash
 from shared.db_utils import get_db_connection
 from shared.auth import require_role_and_ownership
 from shared.response import build_response
+
+DEFAULT_PASSWORD: str = "Password123!"
 
 @require_role_and_ownership
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -71,6 +74,9 @@ def create_individual(collection: Any, body_str: str) -> Dict[str, Any]:
     existing = collection.find_one({"name": data["name"]})
     if existing:
         return build_response(409, {"error": f"An individual with the name '{data['name']}' already exists"})
+
+    password: str = data.pop("password", "") or DEFAULT_PASSWORD
+    data["password_hash"] = generate_password_hash(password)
 
     collection.insert_one(data)
     return build_response(201, data)
